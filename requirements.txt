@@ -1,0 +1,38 @@
+#agents
+langchain
+langchain_community
+langchain_ollama
+langchain_openai
+langgraph
+langchain-core
+fuzzywuzzy
+python_dotenv
+pydantic
+
+#FastAPI
+uvicorn
+fastapi
+requests
+
+#database
+sqlalchemy
+# psycopg2-binary
+alembic
+psycopg
+pgvector
+
+#saving csv 
+filelock
+
+#synthetic scam report
+faker
+FPDF 
+numpy 
+pandas
+
+#RAG 
+sentence-transformers
+
+#unit test
+pytest
+
