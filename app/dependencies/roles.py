@@ -1,30 +1,54 @@
-from sqlalchemy.orm import Session
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+
 from fastapi import Depends, HTTPException
 
-from database import get_session
-from model import Role, User, UserToRole
-from routers.auth import get_current_active_user
+from app.dependencies.db import db_dependency  
+from app.dependencies.auth import get_current_active_user  
+from src.models.data_model import Users, UserRole  
 
-def admin_role(session: Session = Depends(get_session), current_user: User = Depends(get_current_active_user)):
-    roles = session.query(Role).filter(Role.name.in_(['ROLE_ADMIN']))
-    role_ids = [role.id for role in roles]
-    user_to_roles = session.query(UserToRole).filter(UserToRole.user_id == current_user.id).filter(UserToRole.role_id.in_(role_ids)).all()
-    if len(user_to_roles) == 0:
-        raise HTTPException(403, "Unauthorized.")
+def admin_role(db: db_dependency, current_user: Users = Depends(get_current_active_user)):
+    """
+    Dependency to check if the current user has ADMIN role.
+    Raises 403 if not. Use this in router endpoints for admin-only access.
+    """
+    if current_user.role != UserRole.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized: Admin access required")
     return current_user
 
-def moderator_role(session: Session = Depends(get_session), current_user: User = Depends(get_current_active_user)):
-    roles = session.query(Role).filter(Role.name.in_(['ROLE_MODERATOR']))
-    role_ids = [role.id for role in roles]
-    user_to_roles = session.query(UserToRole).filter(UserToRole.user_id == current_user.id).filter(UserToRole.role_id.in_(role_ids)).all()
-    if len(user_to_roles) == 0:
-        raise HTTPException(403, "Unauthorized.")
+def io_role(db: db_dependency, current_user: Users = Depends(get_current_active_user)):
+    """
+    Dependency to check if the current user has INVESTIGATION OFFICER role.
+    Raises 403 if not. Use this for IO-specific endpoints.
+    """
+    if current_user.role != UserRole.io:
+        raise HTTPException(status_code=403, detail="Unauthorized: Investigation Officer access required")
     return current_user
 
-def user_role(session: Session = Depends(get_session), current_user: User = Depends(get_current_active_user)):
-    roles = session.query(Role).filter(Role.name.in_(['ROLE_USER', 'ROLE_MODERATOR', 'ROLE_ADMIN']))
-    role_ids = [role.id for role in roles]
-    user_to_roles = session.query(UserToRole).filter(UserToRole.user_id == current_user.id).filter(UserToRole.role_id.in_(role_ids)).all()
-    if len(user_to_roles) == 0:
-        raise HTTPException(403, "Unauthorized.")
+def analyst_role(db: db_dependency, current_user: Users = Depends(get_current_active_user)):
+    """
+    Dependency to check if the current user has ANALYST role.
+    Raises 403 if not. Use this for analyst-specific endpoints.
+    """
+    if current_user.role != UserRole.analyst:
+        raise HTTPException(status_code=403, detail="Unauthorized: Analyst access required")
     return current_user
+
+# Optional: A general "authenticated" role for any active user
+def any_role(db: db_dependency, current_user: Users = Depends(get_current_active_user)):
+    """
+    Dependency to allow any active authenticated user.
+    Useful for endpoints that don't require a specific role but need login.
+    """
+    return current_user
+
+def require_permission(permission_key: str, required_value: str):
+    def dependency(db: db_dependency, current_user: Users = Depends(get_current_active_user)):
+        if current_user.role == UserRole.admin:
+            return current_user  # Admins bypass—all permissions granted
+        perm = current_user.permission.get(permission_key) if current_user.permission else None
+        if not perm or perm != required_value:
+            raise HTTPException(403, "Insufficient permissions")
+        return current_user
+    return dependency

@@ -88,6 +88,7 @@ class Settings(BaseModel):
     vector: VectorSettings
     data: DataSettings
     agents: AgentSettings
+    secret_key: str = Field(..., description="Secret key for JWT authentication")
 
 @lru_cache()
 def get_settings() -> Settings:
@@ -101,6 +102,7 @@ def get_settings() -> Settings:
     postgres_db = os.getenv("POSTGRES_DB")
     postgres_port = os.getenv("POSTGRES_PORT")
     ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    secret_key = os.getenv("SECRET_KEY")
     
     if not all([database_url, postgres_user, postgres_password, postgres_db, postgres_port]):
         missing = [k for k, v in {
@@ -108,7 +110,8 @@ def get_settings() -> Settings:
             "POSTGRES_USER": postgres_user,
             "POSTGRES_PASSWORD": postgres_password,
             "POSTGRES_DB": postgres_db,
-            "POSTGRES_PORT": postgres_port
+            "POSTGRES_PORT": postgres_port,
+            "SECRET_KEY": secret_key
         }.items() if not v]
         raise ValueError(f"Missing environment variables: {missing}")
     
@@ -124,7 +127,8 @@ def get_settings() -> Settings:
         ),
         vector=VectorSettings(),
         data=DataSettings(),  
-        agents=AgentSettings(ollama_base_url=ollama_base_url)
+        agents=AgentSettings(ollama_base_url=ollama_base_url),
+        secret_key=secret_key
     )
     
     logging.info("Settings initialized successfully")

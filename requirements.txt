@@ -8,11 +8,15 @@ langchain-core
 fuzzywuzzy
 python_dotenv
 pydantic
+pydantic[email]
 
 #FastAPI
 uvicorn
 fastapi
 requests
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
 
 #database
 sqlalchemy

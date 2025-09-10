@@ -1,69 +1,141 @@
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import datetime,timedelta
 from fastapi.security import OAuth2PasswordRequestForm
 
-from database import get_session
-from dependencies.auth import authenticate_user, create_access_token, get_current_active_user, get_password_hash
-from model import User, Role, UserToRole
-from schemas import SignInRequest, Token, TokenJson, UserIn, UserRead
+from app.dependencies.db import db_dependency  # Your shared db_dependency
+from app.dependencies.auth import authenticate_user, create_access_token, get_current_active_user, get_password_hash
+from src.database.database_operations import CRUDOperations
+from src.models.data_model import Users, UserStatus, UserRole  # Import models and enums
+from app.model import Token, TokenJson, SignInRequest, UserIn, UserRead  # Your Pydantic models
 
-router = APIRouter(prefix="/api/auth")
+auth_router = APIRouter(prefix="/api/auth")  # Prefix all routes with /api/auth
 
-ACCESS_TOKEN_EXPIRE_MINUTES = 43200
+ACCESS_TOKEN_EXPIRE_MINUTES = 60  # 60minutes; adjust as needed 
 
-@router.post("/token", response_model=Token)
-def login_for_access_token(
+@auth_router.post("/token", response_model=Token)
+def login_for_access_token(db: db_dependency,
     form_data: OAuth2PasswordRequestForm = Depends()
 ):
-    user = authenticate_user(form_data.username, form_data.password)
+    """
+    OAuth2-compatible login endpoint. Use for form-based auth (e.g., in Postman).
+    Returns JWT access token if credentials valid.
+    """
+    user = authenticate_user(form_data.username, form_data.password, db)  # Note: Using 'username' for form, but it's email
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    if user.status != UserStatus.active:  # NEW: Explicit check for active status before token
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is inactive or pending approval")
+    
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        data={"sub": user.email}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-@router.post("/signin", response_model=TokenJson)
-def login_for_access_token(
-    signin_request: SignInRequest
+@auth_router.post("/signin", response_model=TokenJson)
+def login_for_access_token_json(
+    signin_request: SignInRequest, db: db_dependency
 ):
-    user = authenticate_user(signin_request.username, signin_request.password)
+    """
+    JSON-based signin endpoint for frontend. Takes email/password in body.
+    Returns JWT token if valid, else 401 error.
+    """
+    user = authenticate_user(signin_request.email, signin_request.password, db)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    if user.status != UserStatus.active:  # NEW: Explicit check
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is inactive or pending approval")
+    
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        data={"sub": user.email}, expires_delta=access_token_expires
     )
     return {"token": access_token, "token_type": "bearer"}
 
-@router.get("/users/me", response_model=UserRead)
-def read_users_me(current_user: User = Depends(get_current_active_user)):
-    user = UserRead(username=current_user.username, email=current_user.email)
-    return user
+@auth_router.post("/signup", response_model=UserRead)
+def sign_up(user_in: UserIn, db: db_dependency):
+    """
+    Signup endpoint to create a new user.
+    Hashes password, checks for existing email, sets defaults (PENDING status, default role).
+    Returns user details (no password) on success.
+    """
+    # Check if email exists
+    existing_user = db.query(Users).filter(Users.email == user_in.email).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Hash the password
+    hashed_password = get_password_hash(user_in.password)
+    
+    # NEW: Map role string (value) to enum member
+    role_map = {member.value.upper(): member for member in UserRole}  # e.g., {'ADMIN': UserRole.admin, 'INVESTIGATION OFFICER': UserRole.io, ...}
+    if user_in.role:
+        try:
+            selected_role = role_map[user_in.role.upper()]
+        except KeyError:
+            raise HTTPException(status_code=400, detail=f"Invalid role: {user_in.role}. Must be one of: {', '.join([m.value for m in UserRole])}")
+    else:
+        selected_role = UserRole.io  # Default
+    
+    # Prepare data for CRUD
+    user_data = {
+        "password": hashed_password,
+        "first_name": user_in.first_name,
+        "last_name": user_in.last_name,
+        "sex": user_in.sex,
+        "dob": datetime.strptime(user_in.dob, "%Y-%m-%d").date() if user_in.dob else None,
+        "nationality": user_in.nationality,
+        "race": user_in.race,
+        "contact_no": user_in.contact_no,
+        "email": user_in.email,
+        "blk": user_in.blk,
+        "street": user_in.street,
+        "unit_no": user_in.unit_no,
+        "postcode": user_in.postcode,
+        "role": selected_role,  # Use the enum member
+        "status": UserStatus.pending,  # Default to PENDING
+        "permission": user_in.permission or {},  # Default empty dict
+    }
+    
+    user_crud = CRUDOperations(Users)
+    new_user = user_crud.create(db, user_data)
+    if not new_user:
+        raise HTTPException(status_code=500, detail="Failed to create user")
+    
+    return UserRead(
+        email=new_user.email,
+        first_name=new_user.first_name,
+        last_name=new_user.last_name,
+        contact_no=new_user.contact_no,
+        role=new_user.role.value,
+        status=new_user.status.value,
+    )
 
-@router.get("/users/me/items")
-def read_own_items(current_user: User = Depends(get_current_active_user)):
-    return [{"item_id": "Foo", "owner": current_user.username}]
-
-@router.post("/signup", response_model=UserRead)
-def sign_up(user: UserIn, session: Session = Depends(get_session)):
-    hashed_password = get_password_hash(user.password)
-    role = session.query(Role).filter(Role.name == "ROLE_USER").first()
-    user_to_role = UserToRole()
-    user_to_role.role = role
-    new_user = User(email=user.email, username=user.username, password=hashed_password)
-    new_user.roles.append(user_to_role)
-    session.add(new_user)
-    session.commit()
-    session.refresh(new_user)
-    return UserRead(username=new_user.username, email=new_user.email)
+@auth_router.get("/users/me", response_model=UserRead)
+def read_users_me(current_user: Users = Depends(get_current_active_user)):
+    """
+    Get profile of the current authenticated user.
+    Requires valid JWT token and active status.
+    """
+    return UserRead(
+        email=current_user.email,
+        first_name=current_user.first_name,
+        last_name=current_user.last_name,
+        contact_no=current_user.contact_no,
+        role=current_user.role.value,
+        status=current_user.status.value,
+        permission=current_user.permission,
+    )

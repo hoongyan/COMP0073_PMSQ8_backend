@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr, field_validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date
 from enum import Enum
@@ -160,7 +160,91 @@ class UserRequest(BaseModel):
 
 
 
+#For auth-related schemas 
 
+# NEW: Auth-related schemas (add these at the bottom)
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenJson(BaseModel):
+    token: str
+    token_type: str
+
+class SignInRequest(BaseModel):
+    email: EmailStr # Validates it's a real email format
+    password: str
+
+class TokenData(BaseModel):
+    email: Optional[EmailStr] = None  # For JWT payload
+
+class UserIn(BaseModel):  # For signup input
+    email: EmailStr
+    password: str
+    first_name: str  # Required for signup
+    last_name: str   # Required for signup
+    contact_no: str  # Required
+    role: Optional[str] = "INVESTIGATION OFFICER"  # Default role; adjust as needed
+    # Add other optional fields from UserRequest if you want them in signup
+    sex: Optional[str] = None
+    dob: Optional[str] = None
+    nationality: Optional[str] = None
+    race: Optional[str] = None
+    blk: Optional[str] = None
+    street: Optional[str] = None
+    unit_no: Optional[str] = None
+    postcode: Optional[str] = None
+    permission: Optional[Dict[str, Any]] = {}  # Default empty dict
+    
+    @field_validator('password')
+    def validate_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters')
+        # Optional: Add complexity, e.g., if not any(c.isdigit() for c in v): raise ValueError('Must include digit')
+        return v
+
+    @field_validator('first_name', 'last_name')
+    def validate_names(cls, v: str) -> str:
+        v = v.strip().upper()  # Trim and uppercase (standardize)
+        if len(v) < 2:
+            raise ValueError('Name too short (min 2 characters)')
+        return v
+
+    @field_validator('contact_no')
+    def validate_contact_no(cls, v: str) -> str:
+        if not v.isdigit() or not (8 <= len(v) <= 12):
+            raise ValueError('Contact number must be 8-12 digits')
+        return v
+
+    @field_validator('dob', mode='before')  
+    def validate_dob(cls, v: Optional[str]) -> Optional[str]:
+        if v:
+            try:
+                dob_date = datetime.strptime(v, "%Y-%m-%d").date()
+                if dob_date > date.today():
+                    raise ValueError('Date of birth cannot be in the future')
+            except ValueError:
+                raise ValueError('Invalid DOB format (use YYYY-MM-DD)')
+        return v
+
+    @field_validator('sex')
+    def validate_sex(cls, v: Optional[str]) -> Optional[str]:
+        if v:
+            valid = ['MALE', 'FEMALE', 'OTHER'] 
+            if v.upper() not in valid:
+                raise ValueError(f'Invalid sex: must be one of {valid}')
+            return v.upper()  # Standardize
+        return v
+
+class UserRead(BaseModel):  # For profile output (no password)
+    email: EmailStr
+    first_name: str
+    last_name: str
+    contact_no: str
+    role: str
+    status: str
+    permission: Dict[str, Any] = Field(default={}, description="User permissions dict, e.g., {'reports': 'edit'}")  # NEW: Add this
+    # Add more fields if needed, like from UserResponse
 
 
 
