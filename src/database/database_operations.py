@@ -2,6 +2,7 @@ import sys
 import os
 from typing import Any, List, Optional, Type, Dict, Union, Tuple
 from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import create_engine, text, update, func
 from sqlalchemy.ext.declarative import DeclarativeMeta
 import pandas as pd
@@ -208,19 +209,36 @@ class CRUDOperations:
     def delete(self, db: Session, record_id: Union[str, int]) -> bool:
         """Delete a record by its primary key."""
         
+        # try:
+        #     filter_expr = getattr(self.model, self.pk_column) == record_id
+        #     record = db.query(self.model).filter(filter_expr).first()
+        #     if record:
+        #         db.delete(record)
+        #         db.commit()
+        #         self.logger.info(f"Deleted record with {self.pk_column}: {record_id}")
+        #         return True
+        #     self.logger.warning(f"No record found with {self.pk_column}: {record_id}")
+        #     return False
+        # except Exception as e:
+        #     db.rollback()
+        #     self.logger.error(f"Error deleting record: {str(e)}")
+        #     return False
+        
         try:
             filter_expr = getattr(self.model, self.pk_column) == record_id
-            record = db.query(self.model).filter(filter_expr).first()
-            if record:
-                db.delete(record)
-                db.commit()
+            deleted_count = db.query(self.model).filter(filter_expr).delete()
+            db.commit()
+            if deleted_count > 0:
                 self.logger.info(f"Deleted record with {self.pk_column}: {record_id}")
                 return True
-            self.logger.warning(f"No record found with {self.pk_column}: {record_id}")
             return False
-        except Exception as e:
+        except SQLAlchemyError as e:
             db.rollback()
             self.logger.error(f"Error deleting record: {str(e)}")
+            raise  # Re-raise to bubble up to caller
+        except Exception as e:
+            db.rollback()
+            self.logger.error(f"Unexpected error deleting record: {str(e)}")
             return False
     
     def delete_all(self, db: Session) -> int:
@@ -360,7 +378,7 @@ if __name__ == "__main__":
     db = next(get_db())  # This yields and closes at end of scope, but for __main__, we close manually
 
     # Initialize CRUD for ScamReport
-    crud = CRUDOperations(ScamReport)
+    crud = CRUDOperations(ScamReports)
 
     # Sample data for single create (no report_id, autoincrement)
     sample_data = {

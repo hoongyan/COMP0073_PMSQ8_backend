@@ -81,11 +81,11 @@ class VectorStore:
                 self.logger.error(f"Error in similarity search: {str(e)}", exc_info=True)
                 return pd.DataFrame()
     
- 
+
     def retrieve_scam_reports(self, query: str, top_k: int = 5, metadata_filter: Optional[Dict] = None) -> Tuple[List[Dict], List[float]]:
         """Retrieve scam reports using generic flat similarity search."""
         try:
-            df = self.similarity_search(query=query, model=ScamReport, limit=top_k, metadata_filter=metadata_filter)
+            df = self.similarity_search(query=query, model=ScamReports, limit=top_k, metadata_filter=metadata_filter)
             results = []
             distances = []
             if not df.empty:

@@ -22,6 +22,11 @@ from src.agents.police.profile_rag_ie_agent import ProfileRagIEAgent
 from src.agents.police.profile_rag_ie_kb_agent import ProfileRAGIEKBAgent 
 from src.agents.victim.victim_agent import VictimChatbot
 
+from sqlalchemy.orm import Session
+from src.database.database_operations import CRUDOperations, DatabaseManager
+from src.models.data_model import Conversations, Messages, SenderRole
+from src.database.vector_operations import VectorStore  # If needed for agent tools
+
 class ConversationMode(Enum):
     AUTONOMOUS = "autonomous"
     NONAUTONOMOUS = "nonautonomous"

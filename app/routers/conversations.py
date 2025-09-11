@@ -5,6 +5,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from typing import Annotated
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.dependencies.db import db_dependency  
 from app.dependencies.auth import get_current_active_user 

@@ -1,0 +1,617 @@
+import sys
+import os
+from datetime import datetime
+from fuzzywuzzy import fuzz
+from copy import deepcopy
+import numpy as np
+import json
+from pydantic import BaseModel
+from typing import TypedDict, List, Dict, Optional, Type, Union
+import math
+
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
+from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langgraph.graph import StateGraph, END, START
+from sqlalchemy.orm import Session  # Added for type hints
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
+from src.models.response_model import UserProfile, PoliceResponse, RetrievalOutput, PoliceResponseSlots, KnowledgeBaseOutput, RagOutput
+from src.agents.prompt import Prompt
+from src.agents.tools import PoliceTools
+from src.database.vector_operations import VectorStore
+from src.database.database_operations import DatabaseManager, CRUDOperations
+from src.models.data_model import Strategies
+from config.settings import get_settings
+from config.logging_config import setup_logger
+from src.agents.utils import build_query_with_history
+
+LEVEL_TO_NUM = {"low": 0, "high": 1.0, "distressed": 0, "neutral": 1.0}
+
+class GraphState(TypedDict):
+    """
+    State dictionary for the LangGraph workflow, tracking query processing across nodes.
+    """
+    query: str
+    messages: List[BaseMessage]
+    user_profile: Optional[UserProfile]
+    retrieval_output: Optional[RetrievalOutput]
+    ie_output: Optional[PoliceResponse]
+    filled_this_turn: List[str]
+    prev_turn_data: Dict[str, Union[List[str], Dict[str, bool]]]
+    unfilled_slots: Dict[str, bool]
+    conversation_id: int
+    metrics: Dict[str, Union[bool, int]]
+    initial_profile: Optional[Dict]
+    kb_outputs: Optional[KnowledgeBaseOutput]
+    upserted_strategy: Optional[Dict]
+
+class ProfileRAGIEKBAgent:
+    """
+    An advanced police AI chatbot for scam reporting that self-improves by profiling users,
+    retrieving augmented data (scams + strategies), extracting information, tracking slots,
+    and updating its knowledge base with successful strategies.
+    """
+    def __init__(self, model_name: str = "qwen2.5:7b", llm_provider: str = "Ollama", rag_csv_path: Optional[str] = None, temperature: float = 0.0):
+        """Initialize the chatbot with LLM model, tools, prompts, and workflow."""
+        self.settings = get_settings()
+        self.logger = setup_logger("Augmented_PoliceAgent", self.settings.log.subdirectories["agent"])
+        self.model_name = model_name
+        self.llm_provider = llm_provider
+        self.temperature = temperature
+        
+        # Initialize tools and database
+        self.police_tools = PoliceTools(rag_csv_path=rag_csv_path)
+        self.db_manager = DatabaseManager()  # Store for session creation
+        self.vector_store = VectorStore(self.db_manager.session_factory)
+        self.strategy_crud = CRUDOperations(Strategies)  # Fixed: Only model
+        self.user_profile_prompt = ChatPromptTemplate.from_template(Prompt.template["user_profile_test"])
+        self.rag_prompt_template = ChatPromptTemplate.from_template(Prompt.template["rag_agent"])
+        self.ie_prompt = ChatPromptTemplate.from_messages([
+            ("system", Prompt.template["ie"]),
+            ("system", "Previous Extraction from Last Turn (MUST use as base: Copy all slots unchanged unless explicitly corrected/clarified in the NEW query only):\n{prev_ie_output}"),
+            MessagesPlaceholder(variable_name="history"),
+            ("human", "{user_input}"),
+        ])
+        self.kb_prompt = ChatPromptTemplate.from_template(Prompt.template["knowledge_base"])
+
+        # Build workflow
+        self.workflow = self._build_workflow()
+        
+        self.messages: List[BaseMessage] = []
+        self.user_profile: Optional[Dict] = None
+        self.turn_count = 0
+        self.unfilled_slots: Optional[Dict[str, bool]] = None
+        self.initial_profile = None
+        self.prev_ie_output: Optional[Dict] = None
+        
+        # Tunable weights
+        self.profile_alpha = 0.5
+        self.level_threshold = 0.5
+        self.conf_blend_factor = 0.5
+        self.upsert_threshold = 0.5
+        self.conf_threshold = 0.7
+        self.low_conf_slots_weight = 0.7
+        self.low_conf_rating_weight = 0.3
+        self.high_conf_slots_weight = 0.5
+        self.high_conf_rating_weight = 0.5
+        self.valid_boost = 0.2
+        self.fuzzy_threshold = 80
+        self.score_improve_threshold = 0.05
+        
+        self.logger.info(f"Police chatbot initialized with model: {model_name} and provider: {llm_provider}")
+
+    def _get_llm(self, schema: Optional[Type[BaseModel]] = None):
+        """Get the configured LLM instance, optionally with structured output schema."""
+        if self.llm_provider == "Ollama":
+            params = {
+                "model": self.model_name,
+                "base_url": self.settings.agents.ollama_base_url,
+                "format": "json",
+                "temperature": self.temperature
+            }
+            if schema:
+                params["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": schema.model_json_schema()
+                }
+            llm = ChatOllama(**params)
+        elif self.llm_provider == "OpenAI":
+            api_key = os.environ.get("OPENAI_API_KEY")
+            if not api_key:
+                self.logger.error("OPENAI_API_KEY not found")
+                raise ValueError("OPENAI_API_KEY not found in environment")
+            base_llm = ChatOpenAI(
+                model=self.model_name,
+                api_key=api_key,
+                temperature=self.temperature
+            )
+            if schema:
+                llm = base_llm.with_structured_output(schema)
+            else:
+                llm = base_llm
+        else:
+            raise ValueError(f"Unsupported LLM provider: {self.llm_provider}")
+        return llm
+    
+    def _preprocess_ie_output(self, ie_output: PoliceResponse) -> Dict:
+        """Preprocess IE output before saving/returning. Focuses on specific keys; returns Dict."""
+        try:
+            platforms = ["LAZADA", "SHOPEE", "FACEBOOK", "CAROUSELL", "INSTAGRAM", "WHATSAPP", "SMS", "CALL"]
+            preprocessed = ie_output.model_dump()
+            
+            # Extract scam type
+            scam_type = preprocessed.get("scam_type", "").upper()
+            
+            # Preprocessing for approach platform
+            approach = preprocessed.get("scam_approach_platform", "").upper().strip()
+            if approach:
+                if any(word in approach for word in ["TEXT", "TEXT MESSAGE", "MESSAGE"]):
+                    approach = "SMS"
+                if approach == "SMS" and scam_type == "PHISHING":
+                    preprocessed["scam_communication_platform"] = "SMS"
+                for known in platforms:
+                    if known in approach:
+                        approach = known
+                        break
+                preprocessed["scam_approach_platform"] = approach
+            
+            comm = preprocessed.get("scam_communication_platform", "").upper().strip()
+            if comm:
+                if any(word in comm for word in ["TEXT", "TEXT MESSAGE", "MESSAGE"]):
+                    comm = "SMS"
+                for known in platforms:
+                    if known in comm:
+                        comm = known
+                        break
+                preprocessed["scam_communication_platform"] = comm
+                if approach not in ["LAZADA", "SHOPEE", "FACEBOOK", "CAROUSELL", "INSTAGRAM"]:
+                    preprocessed["scam_moniker"] = ""
+            
+            bank = preprocessed.get("scam_beneficiary_platform", "").upper()
+            if bank in ["UOB", "DBS", "HSBC", "SCB", "MAYBANK", "BOC", "CITIBANK", "CIMB", "GXS", "TRUST"]:
+                preprocessed["scam_transaction_type"] = "BANK TRANSFER"
+            
+            if scam_type in ["GOVERNMENT OFFICIALS IMPERSONATION", "PHISHING"]:
+                preprocessed["scam_moniker"] = ""
+            
+            if scam_type in ["GOVERNMENT OFFICIALS IMPERSONATION", "ECOMMERCE"]:
+                preprocessed["scam_url_link"] = ""
+            
+            if scam_type == "GOVERNMENT OFFICIALS IMPERSONATION" and approach == "SMS":
+                preprocessed["scam_type"] = ""
+            
+            incident_date = preprocessed.get("scam_incident_date", "")
+            if incident_date and incident_date.strip():
+                try:
+                    date_obj = datetime.strptime(incident_date, "%Y-%m-%d")
+                    current_year = datetime.now().year
+                    if date_obj.year != current_year:
+                        new_date = date_obj.replace(year=current_year)
+                        preprocessed["scam_incident_date"] = new_date.strftime("%Y-%m-%d")
+                except ValueError:
+                    pass
+            
+            url = preprocessed.get("scam_url_link", "").strip()
+            invalid_values = {"unknown", "na", "n/a"}
+            if url and url.lower() not in invalid_values and not url.startswith("https://"):
+                preprocessed["scam_url_link"] = "https://" + url
+            
+            contact_no = preprocessed.get("scam_contact_no", "").strip()
+            if contact_no and not any(char.isdigit() for char in contact_no):
+                preprocessed["scam_contact_no"] = ""
+            
+            bank_account = preprocessed.get("scam_bank_account", "").strip()
+            if bank_account and not any(char.isdigit() for char in bank_account):
+                preprocessed["scam_bank_account"] = ""
+            
+            return preprocessed
+        except Exception as e:
+            self.logger.error(f"IE Preprocessing error: {e}")
+            return ie_output.model_dump()
+
+    def _build_workflow(self):
+        """Build LangGraph workflow for augmented processing."""
+        workflow = StateGraph(GraphState)
+        workflow.add_node("shift_prev", self.shift_prev_hook)
+        workflow.add_node("user_profile", self.user_profile_agent)
+        workflow.add_node("retrieval", self.retrieval_agent)
+        workflow.add_node("ie", self.ie_agent)
+        workflow.add_node("slot_tracker", self.slot_tracker)
+        workflow.add_node("knowledge_base", self.knowledge_base_agent)
+        workflow.add_edge(START, "shift_prev")
+        workflow.add_edge("shift_prev", "user_profile")
+        workflow.add_edge("user_profile", "retrieval")
+        workflow.add_edge("retrieval", "ie")
+        workflow.add_edge("ie", "slot_tracker")
+        workflow.add_edge("slot_tracker", "knowledge_base")
+        workflow.add_edge("knowledge_base", END)
+        return workflow.compile()
+
+    def shift_prev_hook(self, state: GraphState) -> GraphState:
+        """Shift previous turn data at the start of a new turn and increment turn count."""
+        updates = {}
+        if state.get("metrics", {}).get("turn_count", 0) > 0:
+            ie_output = state.get("ie_output")
+            conv_response = state["messages"][-1].content if state["messages"] and isinstance(state["messages"][-1], AIMessage) else ""
+            prev_data = state.get("prev_turn_data", {}).copy()
+            prev_data["unfilled_slots"] = {**state.get("unfilled_slots", {})}
+            prev_data["prev_response"] = conv_response
+            updates["prev_turn_data"] = prev_data
+        metrics = state["metrics"].copy()
+        metrics["turn_count"] = metrics.get("turn_count", 0) + 1
+        updates["metrics"] = metrics
+        return updates
+    
+    def user_profile_agent(self, state: GraphState):
+        """Infer and update user profile from query and history using exponential smoothing."""
+        up_llm = self._get_llm(UserProfile)
+        extracted_queries = [msg.content for msg in state["messages"] if isinstance(msg, HumanMessage)]
+        prompt = self.user_profile_prompt.format(query_history=extracted_queries, query=state["query"])
+        default_profile = {
+            "tech_literacy": {"score": 0.5, "level": "high", "confidence": 0.5},
+            "language_proficiency": {"score": 0.5, "level": "high", "confidence": 0.5},
+            "emotional_state": {"score": 0.5, "level": "neutral", "confidence": 0.5}
+        }
+        prior_profile = state.get("user_profile", default_profile)
+        if not isinstance(prior_profile, dict):
+            self.logger.warning("prior_profile was not a dict; forcing default")
+            prior_profile = default_profile
+        initial_profile = state.get("initial_profile", None)
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = up_llm.invoke(prompt)
+                self.logger.debug(f"UserProfileAgent Response: {response.content}")
+                new_profile = json.loads(response.content)
+                if not isinstance(new_profile, dict):
+                    raise ValueError("Invalid new_profile from LLM")
+                break
+            except Exception as e:
+                self.logger.error(f"UserProfileAgent LLM error (attempt {attempt+1}): {str(e)}")
+                if attempt < max_retries - 1:
+                    prompt += "\nPrevious output invalid. Output ONLY valid JSON as specified. No extra text."
+                else:
+                    new_profile = prior_profile
+        updated_profile = {}
+        changes = []
+        for dim in ['tech_literacy', 'language_proficiency', 'emotional_state']:
+            prior_data = prior_profile.get(dim, {"score": 0.5, "level": "high" if dim != "emotional_state" else "neutral", "confidence": 0.5})
+            if not isinstance(prior_data, dict):
+                prior_data = {"score": 0.5, "level": "high" if dim != "emotional_state" else "neutral", "confidence": 0.5}
+            new_data = new_profile.get(dim, {"level": "high" if dim != "emotional_state" else "neutral", "confidence": 0.5})
+            if not isinstance(new_data, dict):
+                new_data = {"level": "high" if dim != "emotional_state" else "neutral", "confidence": 0.5}
+            new_level = new_data["level"]
+            new_conf = new_data["confidence"]
+            new_score = LEVEL_TO_NUM.get(new_level, 0.5)
+            prior_score = prior_data["score"]
+            total_weight = prior_data["confidence"] + new_conf
+            if total_weight > 0:
+                conf_weighted_new = (new_conf * new_score) / total_weight
+                updated_score = self.profile_alpha * prior_score + (1 - self.profile_alpha) * conf_weighted_new
+            else:
+                updated_score = 0.5
+            updated_conf = self.conf_blend_factor * new_conf + (1 - self.conf_blend_factor) * prior_data["confidence"]
+            if dim == "emotional_state":
+                updated_level = "distressed" if updated_score < self.level_threshold else "neutral"
+            else:
+                updated_level = "low" if updated_score < self.level_threshold else "high"
+            updated_profile[dim] = {"score": updated_score, "level": updated_level, "confidence": updated_conf}
+            self.logger.debug(f"{dim} blending: prior_score={prior_score:.2f} (conf={prior_data['confidence']:.2f}), new_score={new_score:.2f} (conf={new_conf:.2f}) → updated_score={updated_score:.2f}, level={updated_level}")
+            if initial_profile:
+                initial_level = initial_profile[dim]["level"]
+                initial_score = initial_profile[dim]["score"]
+                if updated_level != initial_level:
+                    changes.append(f"{dim}: {initial_level}→{updated_level} (score diff {updated_score - initial_score:.2f}, conf {updated_conf:.2f})")
+        is_first_inference = all(prior_data["score"] == 0.5 for prior_data in prior_profile.values())
+        if changes:
+            self.logger.info(f"Turn {state['metrics']['turn_count']}: Profile changes from initial: {'; '.join(changes)}")
+        else:
+            self.logger.debug(f"Turn {state['metrics']['turn_count']}: No profile changes from initial.")
+        self.logger.debug(f"User Profile output: {updated_profile}")
+        updates = {"user_profile": updated_profile}
+        if is_first_inference:
+            updates["initial_profile"] = updated_profile
+            self.logger.info(f"Turn {state['metrics']['turn_count']}: First inference - Setting initial profile: {updated_profile}")
+        return updates
+
+    def retrieval_agent(self, state: GraphState):
+        """Retrieve similar scam reports and strategies; generate suggestions for extraction."""
+        tool = self.police_tools.get_augmented_tools()[0]
+        extracted_queries = [msg.content for msg in state["messages"] if isinstance(msg, HumanMessage)]
+        user_query = build_query_with_history(state["query"], extracted_queries)
+        scam_reports = []
+        strategies = []
+        rag_retrieved = False
+        try:
+            rag_results = tool.invoke({
+                "query": user_query,
+                "user_profile": json.dumps(state.get("initial_profile", state.get("user_profile", {}))),
+                "top_k": 5,
+                "conversation_id": state["conversation_id"],
+                "llm_model": self.model_name,
+                "llm_provider": self.llm_provider
+            })
+            result_dict = json.loads(rag_results) if isinstance(rag_results, str) else rag_results
+            scam_reports = result_dict.get("scam_reports", [])
+            strategies = result_dict.get("strategies", [])
+            rag_retrieved = bool(scam_reports or strategies)
+        except Exception as e:
+            self.logger.error(f"RAG invocation failed: {str(e)}")
+            scam_reports = []
+            strategies = []
+            rag_retrieved = False
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                rag_prompt = self.rag_prompt_template.format(rag_results=json.dumps(scam_reports))
+                rag_llm = self._get_llm(schema=RagOutput)
+                rag_response = rag_llm.invoke(rag_prompt)
+                if self.llm_provider == "OpenAI":
+                    rag_output = rag_response.model_dump()
+                else:
+                    rag_output_dict = json.loads(rag_response.content)
+                    rag_output = RagOutput(**rag_output_dict).model_dump()
+                retrieval_output = RetrievalOutput(
+                    scam_reports=scam_reports,
+                    strategies=strategies,
+                    rag_suggestions=rag_output
+                )
+                self.logger.debug(f"RetrievalAgent output: {retrieval_output.model_dump()}")
+                break
+            except Exception as e:
+                self.logger.error(f"RetrievalAgent error (attempt {attempt+1}): {str(e)}")
+                if attempt == max_retries - 1:
+                    retrieval_output = RetrievalOutput(scam_reports=[], strategies=[])
+        return {
+            "retrieval_output": retrieval_output,
+            "metrics": {**state["metrics"], "rag_retrieved": rag_retrieved}
+        }
+
+    def ie_agent(self, state: GraphState):
+        """Extract structured scam info and generate conversational response using LLM."""
+        ie_llm = self._get_llm(schema=PoliceResponse)
+        prev_ie = state["prev_turn_data"].get("prev_ie_output", {})
+        prompt = self.ie_prompt.format(
+            history=state["messages"],
+            user_input=state["query"],
+            user_profile=state.get("initial_profile", state["user_profile"]),
+            rag_suggestions=state["retrieval_output"].rag_suggestions,
+            strategies=state["retrieval_output"].strategies,
+            unfilled_slots=json.dumps(state["unfilled_slots"]),
+            prev_ie_output=json.dumps(prev_ie, indent=2)
+        )
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = ie_llm.invoke(prompt)
+                if self.llm_provider == "OpenAI":
+                    ie_output = response
+                else:
+                    ie_output_dict = json.loads(response.content)
+                    ie_output = PoliceResponse(**ie_output_dict)
+                self.logger.debug(f"IEAgent output: {ie_output.model_dump()}")
+                preprocessed_ie_output = self._preprocess_ie_output(ie_output)
+                self.logger.debug(f"Preprocessed IE: {preprocessed_ie_output}")
+                return {"ie_output": preprocessed_ie_output}
+            except Exception as e:
+                self.logger.error(f"IEAgent attempt {attempt+1} failed: {str(e)}")
+                if attempt == max_retries - 1:
+                    ie_output = PoliceResponse(
+                        conversational_response="Sorry, I encountered an error. Can you provide more details about the scam, such as the date, what the caller said, and any contact details provided?",
+                        scam_incident_description=state["query"]
+                    )
+                    preprocessed_ie_output = self._preprocess_ie_output(ie_output)
+                    self.logger.debug(f"Preprocessed IE (fallback): {preprocessed_ie_output}")
+                    return {"ie_output": preprocessed_ie_output}
+
+    def slot_tracker(self, state: GraphState):
+        """Track unfilled slots and identify those filled this turn."""
+        ie_output = state["ie_output"]
+        state["prev_turn_data"]["unfilled_slots"] = state.get("unfilled_slots", {})
+        unfilled = {}
+        for field_name in PoliceResponseSlots:
+            value = ie_output.get(field_name.value)
+            is_unfilled = value in ("", 0.0, {}, None, "unknown", "na") or not value
+            unfilled[field_name.value] = is_unfilled
+        prev_unfilled = state["prev_turn_data"]["unfilled_slots"]
+        filled_this_turn = [slot for slot in prev_unfilled if prev_unfilled[slot] and not unfilled.get(slot, True)]
+        self.logger.debug(f"SlotTracker: unfilled={unfilled}, filled={filled_this_turn}")
+        return {
+            "unfilled_slots": unfilled,
+            "filled_this_turn": filled_this_turn
+        }
+
+    def knowledge_base_agent(self, state: GraphState):
+        """Evaluate previous response success and upsert strategy to knowledge base if threshold met."""
+        updates = {}
+        kb_llm = self._get_llm(schema=KnowledgeBaseOutput)
+        filled_this_turn = state["filled_this_turn"]
+        kb_output = None
+        rag_upserted = False
+        upserted_strategy = None
+
+        if not filled_this_turn:
+            self.logger.debug("Skipping KB upsert: Insufficient data.")
+            return updates
+        
+        prev_response = state["prev_turn_data"].get("prev_response", "")
+        if not prev_response:
+            self.logger.debug("Skipping KB upsert: No previous response.")
+            return updates
+        
+        extracted_queries = [msg.content for msg in state["messages"] if isinstance(msg, HumanMessage)]
+        prompt = self.kb_prompt.format(
+            prev_turn_data=state["prev_turn_data"],
+            filled_slots_this_turn=state["filled_this_turn"],
+            query=state["query"],
+            query_history=extracted_queries,
+            user_profile=state.get("initial_profile", state["user_profile"])
+        )
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = kb_llm.invoke(prompt)
+                if self.llm_provider == "OpenAI":
+                    kb_output = response
+                else:
+                    kb_output_dict = json.loads(response.content)
+                    kb_output = KnowledgeBaseOutput(**kb_output_dict)
+                self.logger.debug(f"KBAgentOutput: strategy_type='{kb_output.strategy_type}', lang_rating={kb_output.language_proficiency}, emo_rating={kb_output.emotional_state}, tech_rating={kb_output.tech_literacy}, valid={kb_output.valid}")
+                profile_for_conf = state.get("initial_profile", state["user_profile"])
+                conf_values = [profile_for_conf[dim]["confidence"] for dim in profile_for_conf]
+                avg_conf = np.mean(conf_values) if conf_values else 0.5
+                self.logger.debug(f"Avg confidence (from initial): {avg_conf:.2f}")
+                avg_rating = kb_output.avg_rating()
+                num_filled = len(filled_this_turn)
+                self.logger.debug(f"Num filled this turn: {num_filled}")
+                total_slots = len(PoliceResponseSlots)
+                slots_norm = min(num_filled / total_slots, 1.0) if total_slots > 0 else 0
+                slots_norm = math.sqrt(slots_norm)
+                conf_threshold = self.conf_threshold
+                if avg_conf < conf_threshold:
+                    score = self.low_conf_slots_weight * slots_norm + self.low_conf_rating_weight * avg_rating
+                    self.logger.info(f"Low conf ({avg_conf:.2f} < {conf_threshold}): Score = {self.low_conf_slots_weight}*{slots_norm:.2f} + {self.low_conf_rating_weight}*{avg_rating:.2f} = {score:.2f}")
+                else:
+                    score = self.high_conf_slots_weight * slots_norm + self.high_conf_rating_weight * avg_rating
+                    self.logger.info(f"High conf ({avg_conf:.2f} >= {conf_threshold}): Score = {self.high_conf_slots_weight}*{slots_norm:.2f} + {self.high_conf_rating_weight}*{avg_rating:.2f} = {score:.2f}")
+                if kb_output.valid:
+                    score += self.valid_boost
+                    score = min(score, 1.0)
+                self.logger.info(f"Calculated score: {score:.2f}, threshold: {self.upsert_threshold}")
+                if score >= self.upsert_threshold:
+                    # Use session for strategy operations
+                    with self.db_manager.session_factory() as db:
+                        profile_for_search = state.get("initial_profile", state["user_profile"])
+                        matches_df = self.strategy_crud.strategy_search(
+                            db, user_profile=profile_for_search, limit=10, metadata_filter=None
+                        )
+                        self.logger.debug(f"Exact profile matches found: {len(matches_df)}")
+                        similar_found = False
+                        strategy_type = kb_output.strategy_type.lower().strip()
+                        fuzzy_threshold = self.fuzzy_threshold
+                        score_improve_threshold = self.score_improve_threshold
+                        if not matches_df.empty:
+                            for _, row in matches_df.iterrows():
+                                existing_type = row['strategy_type'].lower().strip()
+                                fuzzy_sim = fuzz.ratio(strategy_type, existing_type)
+                                self.logger.debug(f"Comparing '{strategy_type}' vs '{existing_type}': Fuzzy={fuzzy_sim}%")
+                                if fuzzy_sim >= fuzzy_threshold:
+                                    similar_found = True
+                                    existing_score = row['success_score']
+                                    if score > existing_score + score_improve_threshold:
+                                        self.logger.info(f"Similar strategy (fuzzy={fuzzy_sim}%) with lower score ({existing_score:.2f} < {score:.2f} + {score_improve_threshold}): Updating ID {row['strategy_id']}.")
+                                        self.strategy_crud.update(db, row['strategy_id'], {'success_score': score})
+                                        strategy_data = {
+                                            "strategy_type": kb_output.strategy_type,
+                                            "success_score": score,
+                                            "user_profile": state.get("initial_profile", state["user_profile"])
+                                        }
+                                        updates["upserted_strategy"] = strategy_data
+                                    else:
+                                        self.logger.info(f"Similar strategy (fuzzy={fuzzy_sim}%) but score not better: Skipping update.")
+                                    break
+                        if not similar_found:
+                            self.logger.info("No similar strategies: Inserting new.")
+                            profile_for_insert = state.get("initial_profile", state["user_profile"])
+                            clean_profile = {}
+                            for dim, data in profile_for_insert.items():
+                                clean_profile[dim] = {
+                                    "level": data.get("level", ""),
+                                    "confidence": data.get("confidence", 0.5)
+                                }
+                            full_strategy_data = {
+                                "strategy_type": kb_output.strategy_type,
+                                "response": prev_response,
+                                "success_score": score,
+                                "user_profile": clean_profile
+                            }
+                            self.strategy_crud.create(db, full_strategy_data)
+                            self.strategy_crud.prune_strategies(db)
+                            rag_upserted = True
+                            upserted_strategy = {
+                                "strategy_type": kb_output.strategy_type,
+                                "success_score": score,
+                                "user_profile": clean_profile
+                            }
+                break
+            except Exception as e:
+                self.logger.error(f"KB agent error (attempt {attempt+1}): {str(e)}")
+        if kb_output:
+            updates["kb_outputs"] = kb_output
+        if upserted_strategy:
+            updates["upserted_strategy"] = upserted_strategy
+        if rag_upserted:
+            updates["metrics"] = {**state["metrics"], "rag_upserted": rag_upserted}
+        return updates
+
+    def process_query(self, query: str, conversation_id: int = None) -> dict:
+        """Processes a user query through the workflow, returning response and structured data."""
+        if not query.strip():
+            self.logger.error("Empty query")
+            return {"response": "Query cannot be empty", "structured_data": {}, "rag_invoked": False, "conversation_id": conversation_id}
+        self.logger.info(f"Entering process_query - Persisted self.initial_profile: {self.initial_profile}")
+        self.messages.append(HumanMessage(content=query))
+        state = {
+            "query": query,
+            "messages": self.messages[:-1],
+            "user_profile": self.user_profile,
+            "retrieval_output": None,
+            "ie_output": None,
+            "filled_this_turn": [],
+            "prev_turn_data": {"unfilled_slots": {}, "prev_response": self.messages[-1].content if self.messages and isinstance(self.messages[-1], AIMessage) else "", "prev_ie_output": self.prev_ie_output or {}},
+            "unfilled_slots": {s.value: True for s in PoliceResponseSlots} if self.unfilled_slots is None else self.unfilled_slots.copy(),
+            "conversation_id": conversation_id,
+            "metrics": {"rag_retrieved": False, "rag_upserted": False, "turn_count": self.turn_count},
+            "initial_profile": self.initial_profile,
+        }
+        final_state = self.workflow.invoke(state)
+        self.user_profile = final_state.get("user_profile")
+        self.initial_profile = final_state.get("initial_profile", self.initial_profile)
+        self.unfilled_slots = final_state["unfilled_slots"]
+        ie_out = final_state["ie_output"]
+        response = ie_out.get("conversational_response") if ie_out else "Error processing query."
+        structured_data = ie_out.copy() if ie_out else {}
+        structured_data["rag_upsert"] = final_state["metrics"].get("rag_upserted", False)
+        structured_data["rag_suggestions"] = final_state["retrieval_output"].rag_suggestions if final_state.get("retrieval_output") else {}
+        structured_data["initial_profile"] = final_state.get("initial_profile")
+        structured_data["user_profile"] = self.user_profile
+        structured_data["retrieved_strategies"] = final_state.get("retrieval_output").strategies if final_state.get("retrieval_output") else []
+        kb_output = final_state.get("kb_outputs")
+        if kb_output is None:
+            self.logger.warning("No kb_outputs in final_state")
+        rag_upserted = final_state["metrics"].get("rag_upserted", False)
+        structured_data["upserted_strategy"] = final_state.get("upserted_strategy", {})
+        self.logger.debug(f"Structured Data before return: {json.dumps(structured_data, indent=2)}")
+        self.messages.append(AIMessage(content=response))
+        self.turn_count = final_state["metrics"]["turn_count"]
+        if final_state.get("ie_output"):
+            prev_ie = final_state["ie_output"].copy()
+            if "conversational_response" in prev_ie:
+                del prev_ie["conversational_response"]
+            self.prev_ie_output = prev_ie
+        return {
+            "response": response,
+            "structured_data": structured_data,
+            "rag_invoked": final_state["metrics"]["rag_retrieved"],
+            "conversation_id": conversation_id
+        }
+
+    def reset_state(self):
+        """Reset class-level state for a new conversation."""
+        self.messages = []
+        self.user_profile = None
+        self.turn_count = 0
+        self.unfilled_slots = None
+        self.initial_profile = None
+        self.prev_ie_output = None
+        self.logger.debug("PoliceChatbot state reset")
+
+    def end_conversation(self):
+        """End conversation and reset."""
+        self.reset_state()
+        self.logger.info("Conversation ended")
+        return {"status": "Conversation ended"}
