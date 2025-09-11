@@ -6,16 +6,17 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import datetime,timedelta
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.exc import SQLAlchemyError
 
-from app.dependencies.db import db_dependency  # Your shared db_dependency
+from app.dependencies.db import db_dependency  
 from app.dependencies.auth import authenticate_user, create_access_token, get_current_active_user, get_password_hash
 from src.database.database_operations import CRUDOperations
-from src.models.data_model import Users, UserStatus, UserRole  # Import models and enums
-from app.model import Token, TokenJson, SignInRequest, UserIn, UserRead  # Your Pydantic models
+from src.models.data_model import Users, UserStatus, UserRole 
+from app.model import Token, TokenJson, SignInRequest, UserIn, UserRead
 
-auth_router = APIRouter(prefix="/api/auth")  # Prefix all routes with /api/auth
+auth_router = APIRouter(prefix="/api/auth")  
 
-ACCESS_TOKEN_EXPIRE_MINUTES = 60  # 60minutes; adjust as needed 
+ACCESS_TOKEN_EXPIRE_MINUTES = 60  #adjust as needed 
 
 @auth_router.post("/token", response_model=Token)
 def login_for_access_token(db: db_dependency,
@@ -32,7 +33,7 @@ def login_for_access_token(db: db_dependency,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    if user.status != UserStatus.active:  # NEW: Explicit check for active status before token
+    if user.status != UserStatus.active:  
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is inactive or pending approval")
     
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -56,7 +57,7 @@ def login_for_access_token_json(
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    if user.status != UserStatus.active:  # NEW: Explicit check
+    if user.status != UserStatus.active: 
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is inactive or pending approval")
     
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -73,15 +74,19 @@ def sign_up(user_in: UserIn, db: db_dependency):
     Returns user details (no password) on success.
     """
     # Check if email exists
-    existing_user = db.query(Users).filter(Users.email == user_in.email).first()
+    try:  
+        existing_user = db.query(Users).filter(Users.email == user_in.email).first()
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=500, detail=f"Database error during email check: {str(e)}")
+    
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     
     # Hash the password
     hashed_password = get_password_hash(user_in.password)
     
-    # NEW: Map role string (value) to enum member
-    role_map = {member.value.upper(): member for member in UserRole}  # e.g., {'ADMIN': UserRole.admin, 'INVESTIGATION OFFICER': UserRole.io, ...}
+    # Map role string (value) to enum member
+    role_map = {member.value.upper(): member for member in UserRole}  
     if user_in.role:
         try:
             selected_role = role_map[user_in.role.upper()]
@@ -90,7 +95,6 @@ def sign_up(user_in: UserIn, db: db_dependency):
     else:
         selected_role = UserRole.io  # Default
     
-    # Prepare data for CRUD
     user_data = {
         "password": hashed_password,
         "first_name": user_in.first_name,
@@ -105,15 +109,17 @@ def sign_up(user_in: UserIn, db: db_dependency):
         "street": user_in.street,
         "unit_no": user_in.unit_no,
         "postcode": user_in.postcode,
-        "role": selected_role,  # Use the enum member
-        "status": UserStatus.pending,  # Default to PENDING
-        "permission": user_in.permission or {},  # Default empty dict
+        "role": selected_role,  
+        "status": UserStatus.pending,  
     }
     
     user_crud = CRUDOperations(Users)
-    new_user = user_crud.create(db, user_data)
-    if not new_user:
-        raise HTTPException(status_code=500, detail="Failed to create user")
+    try:  
+        new_user = user_crud.create(db, user_data)
+        if not new_user:
+            raise HTTPException(status_code=500, detail="Failed to create user")
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=500, detail=f"Database error during creation: {str(e)}")
     
     return UserRead(
         email=new_user.email,
@@ -137,5 +143,4 @@ def read_users_me(current_user: Users = Depends(get_current_active_user)):
         contact_no=current_user.contact_no,
         role=current_user.role.value,
         status=current_user.status.value,
-        permission=current_user.permission,
     )

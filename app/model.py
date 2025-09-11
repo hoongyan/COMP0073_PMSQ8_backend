@@ -132,7 +132,6 @@ class UserResponse(BaseModel):
     postcode: str | None
     role: str
     status: str
-    permission: Dict[str, Any]
     registration_datetime: datetime
     last_updated_datetime: datetime
 
@@ -155,7 +154,6 @@ class UserRequest(BaseModel):
     postcode: Optional[str] = None
     role: Optional[str] = None
     status: Optional[str] = None
-    permission: Optional[Dict[str, Any]] = None
 
 
 
@@ -194,7 +192,6 @@ class UserIn(BaseModel):  # For signup input
     street: Optional[str] = None
     unit_no: Optional[str] = None
     postcode: Optional[str] = None
-    permission: Optional[Dict[str, Any]] = {}  # Default empty dict
     
     @field_validator('password')
     def validate_password(cls, v: str) -> str:
@@ -243,8 +240,6 @@ class UserRead(BaseModel):  # For profile output (no password)
     contact_no: str
     role: str
     status: str
-    permission: Dict[str, Any] = Field(default={}, description="User permissions dict, e.g., {'reports': 'edit'}")  # NEW: Add this
-    # Add more fields if needed, like from UserResponse
 
 
 

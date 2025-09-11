@@ -155,7 +155,6 @@ class Users(Base):
     postcode = Column(String, nullable=True)
     role = Column(EnumType(UserRole), nullable=False)
     status = Column(EnumType(UserStatus), default=UserStatus.pending, nullable=False,server_default=UserStatus.pending.value)
-    permission = Column(JSONB, server_default=text("'{}'::jsonb"), nullable=False) 
     registration_datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now()) #Use server default for timestamp
     last_updated_datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now(),onupdate=func.now()) #Use server default for timestamp
 

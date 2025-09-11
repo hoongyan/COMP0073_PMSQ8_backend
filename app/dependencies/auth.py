@@ -9,15 +9,16 @@ from datetime import datetime, timedelta
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from sqlalchemy.exc import SQLAlchemyError
 
-from app.dependencies.db import db_dependency  # New import for shared db_dependency
-from src.models.data_model import Users, UserStatus  # Your Users model, and import UserStatus enum
+from app.dependencies.db import db_dependency 
+from src.models.data_model import Users, UserStatus  
 from app.model import TokenData  
-from config.settings import get_settings  # NEW: Import to load settings (including secret_key)
+from config.settings import get_settings  
 
-# NEW: Load settings once
+
 settings = get_settings()
-SECRET_KEY = settings.secret_key  # NEW: Use the env-loaded secret key
+SECRET_KEY = settings.secret_key 
 ALGORITHM = "HS256"
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -31,7 +32,11 @@ def get_password_hash(password):
     return pwd_context.hash(password)
 
 def authenticate_user(email: str, password: str, db: db_dependency):
-    user = db.query(Users).filter(Users.email == email).first()
+    try: 
+        user = db.query(Users).filter(Users.email == email).first()
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=500, detail=f"Database error during authentication: {str(e)}")
+    
     if not user:
         return False
     if not verify_password(password, user.password):
@@ -59,15 +64,19 @@ def get_current_user(db: db_dependency, token: str = Depends(oauth2_scheme)):
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception
-        token_data = TokenData(email=email)  # Assuming TokenData has 'email' field (we'll define it)
+        token_data = TokenData(email=email)  
     except JWTError:
         raise credentials_exception
-    user = db.query(Users).filter(Users.email == token_data.email).first()
+    try: 
+        user = db.query(Users).filter(Users.email == token_data.email).first()
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=500, detail=f"Database error during user retrieval: {str(e)}")
+    
     if user is None:
         raise credentials_exception
     return user
 
 def get_current_active_user(current_user: Users = Depends(get_current_user)):
-    if current_user.status != UserStatus.active:  # NEW: Use enum directly (was .value != "ACTIVE")
+    if current_user.status != UserStatus.active:  
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user

@@ -43,12 +43,3 @@ def any_role(db: db_dependency, current_user: Users = Depends(get_current_active
     """
     return current_user
 
-def require_permission(permission_key: str, required_value: str):
-    def dependency(db: db_dependency, current_user: Users = Depends(get_current_active_user)):
-        if current_user.role == UserRole.admin:
-            return current_user  # Admins bypass—all permissions granted
-        perm = current_user.permission.get(permission_key) if current_user.permission else None
-        if not perm or perm != required_value:
-            raise HTTPException(403, "Insufficient permissions")
-        return current_user
-    return dependency
