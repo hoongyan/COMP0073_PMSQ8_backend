@@ -18,6 +18,10 @@ class LinkedReport(BaseModel):
     report_id: str
     role: str
 
+class LinkedPersonCreate(BaseModel):
+    person_id: int
+    role: str  
+    
 class ReportStatus(str, Enum):
     unassigned = "Unassigned"
     assigned = "Assigned"
@@ -243,6 +247,15 @@ class UserRead(BaseModel):  # For profile output (no password)
 
 
 
+
+class ResetPasswordRequest(BaseModel):
+    password: str
+
+    @field_validator('password')
+    def validate_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters')
+        return v
 
 
 

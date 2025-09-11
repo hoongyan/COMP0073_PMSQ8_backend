@@ -19,10 +19,7 @@ router = APIRouter()
 settings = get_settings()
 
 
-
 db_dependency = Annotated[Session, Depends(get_db)]
-
-
 
 
 
