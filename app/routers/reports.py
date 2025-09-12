@@ -85,7 +85,6 @@ def get_reports_endpoint(
         raise HTTPException(status_code=500, detail=f"Database error during read: {str(e)}")
     
     if not reports:
-        # raise HTTPException(status_code=404, detail="No reports found")
         return ScamReportListResponse(reports=[])
     
     enriched_reports = [enrich_report(db, report) for report in reports]
@@ -137,10 +136,11 @@ def create_report_endpoint(
     # Validate io_in_charge if provided (user exists)
     if 'io_in_charge' in create_data:
         io_id = create_data['io_in_charge']
-        if db.query(Users).filter(Users.user_id == io_id).first() is None:
-            raise HTTPException(status_code=400, detail=f"Invalid io_in_charge: User ID {io_id} does not exist")
+        if io_id is not None:
+            if db.query(Users).filter(Users.user_id == io_id).first() is None:
+                raise HTTPException(status_code=400, detail=f"Invalid io_in_charge: User ID {io_id} does not exist")
     
-    # Validate status if provided (defaults to UNASSIGNED in model)
+    # Validate status if provided 
     if 'status' in create_data:
         try:
             ReportStatus[create_data['status'].lower()]
@@ -157,7 +157,7 @@ def create_report_endpoint(
         elif new_io is None and new_status != 'RESOLVED':
             create_data['status'] = 'UNASSIGNED'
         
-        # Validate for consistency (prevent invalid combos)
+        # Validate for consistency 
         if new_status == 'ASSIGNED' and new_io is None:
             raise HTTPException(status_code=400, detail="Cannot set status to ASSIGNED without io_in_charge")
         if new_status == 'UNASSIGNED' and new_io is not None:
@@ -169,13 +169,12 @@ def create_report_endpoint(
         if not new_report:
             raise HTTPException(status_code=500, detail="Failed to create report")
         
-        # Generate embedding (since description non-empty)
+        # Generate embedding
         embedding = vector_store.get_embedding(new_report.scam_incident_description)
         updated = scam_crud.update_embedding(db, new_report.report_id, embedding)
         if not updated:
             raise HTTPException(status_code=500, detail="Failed to update embedding")
         
-        # Load joins for enrich
         new_report = db.query(ScamReports).options(
             joinedload(ScamReports.io),
             joinedload(ScamReports.pois).joinedload(ReportPersonsLink.person)
@@ -215,7 +214,6 @@ def update_report_endpoint(
     today = date.today()
     if 'scam_incident_date' in update_data or 'scam_report_date' in update_data:
         try:
-            # Fetch current for cross-validation
             current_report = db.query(ScamReports).filter(ScamReports.report_id == report_id).first()
             if not current_report:
                 raise HTTPException(status_code=404, detail=f"Report with ID {report_id} not found")
@@ -238,8 +236,9 @@ def update_report_endpoint(
     # Validate io_in_charge if provided
     if 'io_in_charge' in update_data:
         io_id = update_data['io_in_charge']
-        if db.query(Users).filter(Users.user_id == io_id).first() is None:
-            raise HTTPException(status_code=400, detail=f"Invalid io_in_charge: User ID {io_id} does not exist")
+        if io_id is not None:
+            if db.query(Users).filter(Users.user_id == io_id).first() is None:
+                raise HTTPException(status_code=400, detail=f"Invalid io_in_charge: User ID {io_id} does not exist")
     
     # Validate status if provided
     if 'status' in update_data:
@@ -262,7 +261,7 @@ def update_report_endpoint(
         elif new_io is None and new_status != 'RESOLVED':
             update_data['status'] = 'UNASSIGNED'
         
-        # Validate for consistency (prevent invalid combos)
+        # Validate for consistency
         if new_status == 'ASSIGNED' and new_io is None:
             raise HTTPException(status_code=400, detail="Cannot set status to ASSIGNED without io_in_charge")
         if new_status == 'UNASSIGNED' and new_io is not None:
@@ -282,7 +281,6 @@ def update_report_endpoint(
             if not updated_emb:
                 raise HTTPException(status_code=500, detail="Failed to update embedding")
         
-        # Load joins for enrich
         updated_report = db.query(ScamReports).options(
             joinedload(ScamReports.io),
             joinedload(ScamReports.pois).joinedload(ReportPersonsLink.person)

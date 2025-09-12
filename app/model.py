@@ -172,7 +172,6 @@ class UserRequest(BaseModel):
 
 #For auth-related schemas 
 
-# NEW: Auth-related schemas (add these at the bottom)
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -195,7 +194,6 @@ class UserIn(BaseModel):  # For signup input
     last_name: str   # Required for signup
     contact_no: str  # Required
     role: Optional[str] = "INVESTIGATION OFFICER"  # Default role; adjust as needed
-    # Add other optional fields from UserRequest if you want them in signup
     sex: Optional[str] = None
     dob: Optional[str] = None
     nationality: Optional[str] = None
@@ -308,60 +306,62 @@ class FrontendConversation(BaseModel):
 
 class ConversationListResponse(BaseModel):
     conversations: List[FrontendConversation]
+
+
+class PublicReportSubmission(BaseModel):
+    first_name: str
+    last_name: str
+    contact_no: str
+    email: EmailStr
+    sex: Optional[str] = None
+    dob: Optional[str] = None
+    nationality: Optional[str] = None
+    race: Optional[str] = None
+    occupation: Optional[str] = None
+    blk: Optional[str] = None
+    street: Optional[str] = None
+    unit_no: Optional[str] = None
+    postcode: Optional[str] = None
+    role: Optional[str] = "reportee"
+
+    scam_incident_date: str
+    scam_report_date: Optional[str] = None
+    scam_type: Optional[str] = None
+    scam_approach_platform: Optional[str] = None
+    scam_communication_platform: Optional[str] = None
+    scam_transaction_type: Optional[str] = None
+    scam_beneficiary_platform: Optional[str] = None
+    scam_beneficiary_identifier: Optional[str] = None
+    scam_contact_no: Optional[str] = None
+    scam_email: Optional[str] = None
+    scam_moniker: Optional[str] = None
+    scam_url_link: Optional[str] = None
+    scam_amount_lost: Optional[float] = None
+    scam_incident_description: str
     
+    conversation_id: Optional[int] = None
 
-# class ChatRequest(BaseModel):
-#     agent_id: int
-#     query: str
-#     user_id: Optional[int] = None  # Add user_id for authenticated users
-#     conversation_history: list = []
-    
-# class SimulationRequest(BaseModel):
-#     police_agent_id: int
-#     victim_agent_id: int
-#     max_turns: int = 10
-#     initial_query: Optional[str] = None
+    @field_validator('first_name', 'last_name')
+    def validate_names(cls, v: str) -> str:
+        v = v.strip().upper()
+        if len(v) < 2:
+            raise ValueError('Name must be at least 2 characters')
+        return v
 
-# class Message(BaseModel):
-#     id: int
-#     content: str
-#     sender_type: str
-#     sender_id: Optional[int]
-#     agent_id: Optional[int]
-    
-# class Conversation(BaseModel):
-#     conversation_id: int
-#     title: str
-#     description: Optional[str]
-#     messages: List[Message]
+    @field_validator('contact_no')
+    def validate_contact_no(cls, v: str) -> str:
+        if not v.startswith('+') or len(v) < 9:
+            raise ValueError('Contact number must start with + and have at least 8 digits')
+        return v
 
-# class ConversationHistoryResponse(BaseModel):
-#     conversations: List[Conversation]
+    @field_validator('scam_incident_description')
+    def validate_description(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError('Description cannot be empty')
+        return v
 
-
-# class SubmitReportRequest(BaseModel):
-#     conversation_id: int
-#     report_data: Dict
- 
-# class PoliceResponse(BaseModel):
-#     conversational_response: str = Field(..., description="The conversational response to the victim")
-#     firstName: str = Field(default="", description="Victim's first name")
-#     lastName: str = Field(default="", description="Victim's last name")
-#     telNo: str = Field(default="", description="Victim's telephone number")
-#     address: str = Field(default="", description="Victim's address")
-#     occupation: str = Field(default="", description="Victim's occupation")
-#     age: str = Field(default="", description="Victim's age")
-#     incidentDate: str = Field(default="", description="Date of the scam incident")
-#     reportDate: str = Field(lambda: datetime.now().strftime("%Y-%m-%d"), description="Date the report is filed")
-#     location: str = Field(default="", description="Location of the scam incident")
-#     crimeType: str = Field(default="", description="Type of crime (e.g., e-commerce scam)")
-#     approachPlatform: str = Field(default="", description="Platform where scammer approached victim")
-#     communicationPlatform: str = Field(default="", description="Platform used for communication")
-#     bank: str = Field(default="", description="Victim's bank name")
-#     bankNo: str = Field(default="", description="Victim's bank account number")
-#     contactInfo: str = Field(default="", description="Scammer's contact information")
-#     description: str = Field(default="", description="Detailed description of the scam")
-#     summary: str = Field(default="", description="Summary of the scam incident")
-    
-
-
+# Response model (unchanged)
+class PublicReportResponse(BaseModel):
+    report_id: int
+    conversation_id: Optional[int]=None
+    message: str = "Report submitted successfully"
