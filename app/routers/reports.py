@@ -31,7 +31,8 @@ def get_vector_store():
 
 def enrich_report(db: Session, report: ScamReports) -> ScamReportResponse:
     """Helper to enrich a single report with IO name, linked persons, and status title."""
-
+    
+    io_id = report.io.user_id if report.io else None
     io_name = f"{report.io.first_name} {report.io.last_name}" if report.io else ""
     linked_persons = [
         LinkedPerson(
@@ -59,6 +60,7 @@ def enrich_report(db: Session, report: ScamReports) -> ScamReportResponse:
         scam_amount_lost=report.scam_amount_lost,
         scam_incident_description=report.scam_incident_description,
         status=status_title,
+        assigned_IO_id=io_id,
         assigned_IO=io_name,
         linked_persons=linked_persons
     )

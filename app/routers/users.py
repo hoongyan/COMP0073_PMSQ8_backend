@@ -12,8 +12,8 @@ from app.dependencies.db import db_dependency
 from app.dependencies.roles import admin_role  
 from src.database.database_operations import CRUDOperations
 from src.models.data_model import Users, UserRole, UserStatus
-from app.dependencies.auth import get_password_hash  # For hashing passwords
-from app.model import UserListResponse, UserResponse, UserRequest, ResetPasswordRequest
+from app.dependencies.auth import get_password_hash, get_current_active_user 
+from app.model import UserListResponse, UserResponse, UserRequest, ResetPasswordRequest, IOOption, IOListResponse
 
 users_router = APIRouter(
     prefix="/users",
@@ -267,3 +267,35 @@ def delete_user_endpoint(
     except SQLAlchemyError as e:
         raise HTTPException(status_code=500, detail=f"Database error during delete: {str(e)}")
     return None
+
+
+
+@users_router.get("/io", response_model=IOListResponse)
+def get_ios_endpoint(
+    db: db_dependency,
+    current_user: Users = Depends(get_current_active_user)  # Any active user can access
+):
+    """
+    Retrieve a list of active Investigation Officers (IOs).
+    Returns user_id and full_name for dropdown selection.
+    Accessible by any active authenticated user.
+    """
+    try:
+        ios = db.query(Users).filter(
+            Users.role == UserRole.io,
+            Users.status == UserStatus.active
+        ).order_by(Users.user_id.asc()).all()
+    except SQLAlchemyError as e:
+        raise HTTPException(status_code=500, detail=f"Database error during read: {str(e)}")
+    
+    if not ios:
+        return IOListResponse(ios=[])
+    
+    enriched_ios = [
+        IOOption(
+            user_id=user.user_id,
+            full_name=f"{user.first_name} {user.last_name}"
+        ) for user in ios
+    ]
+    
+    return IOListResponse(ios=enriched_ios)

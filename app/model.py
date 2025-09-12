@@ -22,6 +22,13 @@ class LinkedPersonCreate(BaseModel):
     person_id: int
     role: str  
     
+class IOOption(BaseModel):
+    user_id: int
+    full_name: str
+
+class IOListResponse(BaseModel):
+    ios: List[IOOption]
+    
 class ReportStatus(str, Enum):
     unassigned = "Unassigned"
     assigned = "Assigned"
@@ -44,6 +51,7 @@ class ScamReportResponse(BaseModel):
     scam_amount_lost: float | None
     scam_incident_description: str | None
     status: ReportStatus
+    assigned_IO_id: Optional[int] = None
     assigned_IO: str | None = Field(..., description="IO full name or empty string")
     linked_persons: List[LinkedPerson] = Field(default_factory=list)
     
