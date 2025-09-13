@@ -1,4 +1,4 @@
-.PHONY: install setup test clean init load
+.PHONY: install setup preload test clean init load
 
 install:
 	@echo "Installing Python dependencies from requirements.txt..."
@@ -9,6 +9,13 @@ setup:
 	./scripts/setup/setup.sh
 	python scripts/setup/init_db.py
 	python scripts/setup/load_data.py
+		python scripts/setup/seed_loader.py
+
+preload:  
+	@echo "Preloading data into existing database..."
+	python scripts/setup/init_db.py
+	python scripts/setup/load_data.py
+	python scripts/setup/seed_loader.py
 
 init:
 	@echo "Initializing database schema..."

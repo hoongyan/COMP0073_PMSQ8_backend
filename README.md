@@ -155,6 +155,7 @@ certain python environments may not have tkinter support -->
 ## Setup Instructions
 
 ### Prerequisites
+
 - Docker and Docker Compose
 - Python 3.8+
 - Git
@@ -163,12 +164,14 @@ certain python environments may not have tkinter support -->
 ### Steps
 
 1. **Clone the Repository**:
+
    ```bash
    git clone <your-repo-url>
    cd <your-repo>
    ```
 
 2. **Set Up Environment Variables**:
+
    - Copy `.env.example` to `.env`:
      ```bash
      cp .env.example .env
@@ -184,11 +187,13 @@ certain python environments may not have tkinter support -->
      ```
 
 3. **Install Dependencies**:
+
    ```bash
    make install
    ```
 
 4. **Set Up Docker, Schema, and Data**:
+
    - Run the full setup:
      ```bash
      make setup
@@ -210,8 +215,49 @@ certain python environments may not have tkinter support -->
      ```
 
 ## Notes
+
 - Ensure Docker is running before executing scripts.
 - Ensure `data/scam_report/dataset/scam_details.csv` exists.
 - Logs are written to `application.log`, `database_operations.log`, `vector_operations.log`, `preprocessor.log`, and `data_load.log`.
 - For development, set `DATABASE_ECHO=True` in `.env` to enable SQLAlchemy query logging.
+
+```
+
+
+
+
+
+use this
+
+
+## Deployment to Render
+
+### Prerequisites
+- Git repo with code pushed (exclude .env and secrets).
+- Render account.
+- Local setup working (test with `make setup`).
+
+### Step 1: Preload Data Locally
+Data must be preloaded before deploying to Render to ensure it's available immediately.
+
+1. Activate venv: `source venv/bin/activate`
+2. Run `make setup` (starts containers, runs migrations, loads data/seeds). This populates the local Docker volume.
+   - If containers are already running: Use `make preload` for faster data reload.
+3. Verify: Exec into DB container and query tables (e.g., `SELECT COUNT(*) FROM scam_reports;`).
+4. Export DB: `docker exec comp0073_production_pgvector pg_dump -U comp0073_user -d productiondb > db_dump.sql`
+
+### Step 2: Deploy Database on Render
+- Create a PostgreSQL service (version 17).
+- Enable pgvector: In Render shell, `psql $RENDER_PSQL_URL` then `CREATE EXTENSION IF NOT EXISTS vector;`.
+- Import data: `psql "your_render_db_url?sslmode=require" < db_dump.sql`
+
+### Step 3: Deploy Ollama and App
+- Deploy Ollama as Private Service (Dockerfile.ollama).
+- Deploy App as Web Service (Dockerfile), with env vars (e.g., DATABASE_URL from Render DB, OLLAMA_BASE_URL=http://your-ollama-service:11434).
+- Use entrypoint.sh in Dockerfile for runtime checks (migrations/init, but skip loading since preloaded).
+
+### Notes
+- Time: ~30-60 mins for preload + deploy.
+- If data changes often, run preload scripts directly against Render DB (update .env temporarily).
+- Troubleshoot: Check Render logs and local script logs in `logs/`.
 ```

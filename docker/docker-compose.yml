@@ -2,7 +2,7 @@ name: comp0073_production
 
 services:
   pgvector:
-    image: pgvector/pgvector:0.8.0-pg17
+    image: pgvector/pgvector:pg17
     container_name: comp0073_production_pgvector
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
@@ -15,5 +15,55 @@ services:
     command: ["postgres", "-c", "shared_preload_libraries=vector"]
     restart: unless-stopped
 
+  ollama:
+    build:
+      context: ../  
+      dockerfile: Dockerfile.ollama
+    container_name: comp0073_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+
+  app:
+    build:
+      context: ../  
+      dockerfile: Dockerfile
+    container_name: comp0073_app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - pgvector
+      - ollama
+    environment:
+      # - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@pgvector:5432/${POSTGRES_DB}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
+      - SECRET_KEY=${SECRET_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}  
+    restart: unless-stopped
+
 volumes:
   production_data:
+  ollama_data:
+
+# name: comp0073_production
+
+# services:
+#   pgvector:
+#     image: pgvector/pgvector:0.8.0-pg17
+#     container_name: comp0073_production_pgvector
+#     environment:
+#       - POSTGRES_USER=${POSTGRES_USER}
+#       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+#       - POSTGRES_DB=${POSTGRES_DB}
+#     ports:
+#       - "${POSTGRES_PORT}:5432"
+#     volumes:
+#       - production_data:/var/lib/postgresql/data
+#     command: ["postgres", "-c", "shared_preload_libraries=vector"]
+#     restart: unless-stopped
+
+# volumes:
+#   production_data:

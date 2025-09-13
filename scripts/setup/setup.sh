@@ -3,6 +3,12 @@
 # Exit on any error
 set -e
 
+# Guard: Check if running inside a Docker container (prevent accidental exec)
+if [ -f /.dockerenv ]; then
+    echo "Error: This script must be run on the host machine, not inside a container."
+    exit 1
+fi
+
 # Define paths
 COMPOSE_FILE="docker/docker-compose.yml"
 ENV_FILE=".env"
@@ -36,15 +42,19 @@ if [ ! -f "$COMPOSE_FILE" ]; then
     exit 1
 fi
 
-# Build and start Docker services
-echo "Starting Docker services..."
-docker-compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up --build -d
-if [ $? -eq 0 ]; then
-    echo "Docker containers started successfully."
+if docker ps -q -f name=comp0073_production_pgvector | grep -q . && docker ps -q -f name=comp0073_ollama | grep -q .; then
+    echo "Containers already running—skipping docker-compose up."
 else
-    echo "Failed to start Docker containers. Check logs:"
-    docker logs comp0073_production_pgvector
-    exit 1
+    # Build and start Docker services
+    echo "Starting Docker services..."
+    docker-compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up --build -d
+    if [ $? -eq 0 ]; then
+        echo "Docker containers started successfully."
+    else
+        echo "Failed to start Docker containers. Check logs:"
+        docker logs comp0073_production_pgvector
+        exit 1
+    fi
 fi
 
 # Enable pgvector extension

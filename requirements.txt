@@ -20,9 +20,9 @@ python-multipart
 
 #database
 sqlalchemy
-# psycopg2-binary
 alembic
-psycopg
+# psycopg
+psycopg[binary]
 pgvector
 
 #saving csv 

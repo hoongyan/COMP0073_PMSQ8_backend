@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 from sqlalchemy import text
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+from app.dependencies.auth import get_password_hash
 from src.database.database_operations import DatabaseManager, CRUDOperations
 from src.models.data_model import Users, ReportPersonsLink, Conversations, Messages, UserRole, UserStatus, PersonRole, SenderRole, ReportStatus
 from config.settings import get_settings
@@ -43,18 +44,18 @@ class SeedLoader:
                         print(f"Failed to reset sequences: {str(e)}")
                         raise
 
-                # Clear existing data for seeded tables to avoid conflicts
+                # Clear existing data
                 deleted_users = self.user_crud.delete_all(db)
                 print(f"Deleted {deleted_users} existing users")
                 deleted_links = self.link_crud.delete_all(db)
                 print(f"Deleted {deleted_links} existing report_persons_links")
-                deleted_convs = self.conv_crud.delete_all(db)  # This cascades to delete messages
+                deleted_convs = self.conv_crud.delete_all(db)  
                 print(f"Deleted {deleted_convs} existing conversations (and associated messages)")
 
-                # Seed Users (3 users: admin, io, analyst)
+                # Seed Users 
                 users_data = [
                     {
-                        'password': 'password123',  # In production, hash this!
+                        'password': get_password_hash('password123'), 
                         'first_name': 'JOHN',
                         'last_name': 'DOE',
                         'sex': 'MALE',
@@ -69,10 +70,9 @@ class SeedLoader:
                         'postcode': '238878',
                         'role': UserRole.admin.value,  # 'ADMIN'
                         'status': UserStatus.active.value,  # 'ACTIVE'
-                        'permission': {"persons": "view", "reports": "edit"}
                     },
                     {
-                        'password': 'securepass456',
+                        'password': get_password_hash('securepass456'),
                         'first_name': 'JANE',
                         'last_name': 'SMITH',
                         'sex': 'FEMALE',
@@ -87,10 +87,9 @@ class SeedLoader:
                         'postcode': '259768',
                         'role': UserRole.io.value,  # 'INVESTIGATION OFFICER'
                         'status': UserStatus.active.value,  # 'ACTIVE'
-                        'permission': {"persons": "view", "reports": "edit"}
                     },
                     {
-                        'password': 'analystpass789',
+                        'password': get_password_hash('analystpass789'),
                         'first_name': 'BOB',
                         'last_name': 'JOHNSON',
                         'sex': 'MALE',
@@ -105,7 +104,6 @@ class SeedLoader:
                         'postcode': '600789',
                         'role': UserRole.analyst.value,  # 'ANALYST'
                         'status': UserStatus.pending.value,  # 'PENDING'
-                        'permission': {"persons": "view", "reports": "edit"}
                     }
                 ]
                 users_df = pd.DataFrame(users_data)
@@ -119,9 +117,9 @@ class SeedLoader:
                     if users:
                         print(f"Verified sample user: {users[0].first_name} ({users[0].role})")
 
-                # Seed ReportPersonsLink (400 links: person_id n -> report_id n, role cycling VICTIM/SUSPECT/WITNESS)
+                # Seed ReportPersonsLink
                 links = []
-                roles = [PersonRole.victim.value, PersonRole.suspect.value, PersonRole.witness.value]  # 'VICTIM', 'SUSPECT', 'WITNESS'
+                roles = [PersonRole.victim.value, PersonRole.suspect.value, PersonRole.witness.value] 
                 for i in range(1, 401):
                     role = roles[(i - 1) % 3]
                     links.append({'report_id': i, 'person_id': i, 'role': role})
@@ -136,7 +134,7 @@ class SeedLoader:
                     if sample_link:
                         print(f"Verified sample link: report_id={sample_link[0].report_id}, person_id={sample_link[0].person_id}, role={sample_link[0].role}")
 
-                # Seed Conversations (3 conversations linked to report_ids 10, 11, 12)
+                # Seed Conversations 
                 convs_data = [
                     {'report_id': 10},
                     {'report_id': 11},
@@ -152,7 +150,7 @@ class SeedLoader:
                 self.logger.info(f"Created {len(conv_ids)} conversations: {conv_ids}")
                 print(f"Created {len(conv_ids)} conversations: {conv_ids}")
 
-                # Seed Messages (3 messages per conversation, alternating HUMAN/AI/HUMAN)
+                # Seed Messages 
                 for conv_id in conv_ids:
                     messages_data = [
                         {'conversation_id': conv_id, 'sender_role': SenderRole.human.value, 'content': 'Hello, I was scammed and need to report it.'},  # 'HUMAN'
