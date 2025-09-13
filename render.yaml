@@ -1,0 +1,46 @@
+services:
+  - type: web
+    name: comp0073_app
+    env: docker
+    dockerfilePath: ./Dockerfile  # Path to your app Dockerfile
+    plan: free  # Or starter ($7/mo) for more RAM/CPU
+    branch: main  # Your branch
+    healthCheckPath: /  # Or your health endpoint
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: comp0073_production_pgvector
+          property: connectionString  # Auto-generates psql://...@host:port/db
+      - key: OLLAMA_BASE_URL
+        value: http://comp0073_ollama:11434  # Internal service name
+      - key: SECRET_KEY
+        sync: false  # Set manually in dashboard
+      - key: OPENAI_API_KEY
+        sync: false  # If using; set in dashboard
+    numInstances: 1
+
+  - type: web  # Ollama as a "web" service (exposes port)
+    name: comp0073_ollama
+    env: docker
+    dockerfilePath: ./Dockerfile.ollama
+    plan: free
+    branch: main
+    numInstances: 1
+    # No public port—internal only
+
+  - type: pserv  # PostgreSQL (pgvector)
+    name: comp0073_production_pgvector
+    env: docker
+    image: pgvector/pgvector:pg17  # Directly use image
+    plan: free
+    disk:
+      name: production_data
+      mountPath: /var/lib/postgresql/data
+      sizeGB: 1  # Free tier limit; upgrade if needed
+    envVars:
+      - key: POSTGRES_USER
+        value: admin  # Or sync:false and set in dashboard
+      - key: POSTGRES_PASSWORD
+        generateValue: true  # Auto-generates secure pass
+      - key: POSTGRES_DB
+        value: comp0073
