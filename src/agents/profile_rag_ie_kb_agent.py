@@ -21,7 +21,7 @@ from src.models.response_model import UserProfile, PoliceResponse, RetrievalOutp
 from src.agents.prompt import Prompt
 from src.agents.tools import PoliceTools
 from src.database.vector_operations import VectorStore
-from src.database.database_operations import DatabaseManager, CRUDOperations
+from src.database.database_operations import DatabaseManager, CRUDOperations, StrategiesCRUD
 from src.models.data_model import Strategies
 from config.settings import get_settings
 from config.logging_config import setup_logger
@@ -65,7 +65,8 @@ class ProfileRAGIEKBAgent:
         self.police_tools = PoliceTools(rag_csv_path=rag_csv_path)
         self.db_manager = DatabaseManager()  # Store for session creation
         self.vector_store = VectorStore(self.db_manager.session_factory)
-        self.strategy_crud = CRUDOperations(Strategies)  # Fixed: Only model
+        # self.strategy_crud = CRUDOperations(Strategies)  # Fixed: Only model
+        self.strategy_crud = StrategiesCRUD()
         self.user_profile_prompt = ChatPromptTemplate.from_template(Prompt.template["user_profile_test"])
         self.rag_prompt_template = ChatPromptTemplate.from_template(Prompt.template["rag_agent"])
         self.ie_prompt = ChatPromptTemplate.from_messages([
@@ -548,11 +549,15 @@ class ProfileRAGIEKBAgent:
             updates["metrics"] = {**state["metrics"], "rag_upserted": rag_upserted}
         return updates
 
-    def process_query(self, query: str, conversation_id: int = None) -> dict:
+    def process_query(self, query: str, messages: Optional[List[BaseMessage]] = None, conversation_id: int = None) -> dict:
         """Processes a user query through the workflow, returning response and structured data."""
         if not query.strip():
             self.logger.error("Empty query")
             return {"response": "Query cannot be empty", "structured_data": {}, "rag_invoked": False, "conversation_id": conversation_id}
+        
+        if messages is not None:
+            self.messages = messages  # Override internal state with DB-loaded history
+        
         self.logger.info(f"Entering process_query - Persisted self.initial_profile: {self.initial_profile}")
         self.messages.append(HumanMessage(content=query))
         state = {

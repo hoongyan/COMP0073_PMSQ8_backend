@@ -58,8 +58,8 @@ class ScamReportResponse(BaseModel):
     
     
 class ReportRequest(BaseModel):
-    scam_incident_date: Optional[str] = None  # e.g., "2023-01-01"; converted to date in handler
-    scam_report_date: Optional[str] = None    # e.g., "2023-01-02"; converted to date in handler
+    scam_incident_date: Optional[str] = None 
+    scam_report_date: Optional[str] = None 
     scam_type: Optional[str] = None
     scam_approach_platform: Optional[str] = None
     scam_communication_platform: Optional[str] = None
@@ -105,7 +105,7 @@ class PersonRequest(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     sex: Optional[str] = None
-    dob: Optional[str] = None  # String input, convert to date
+    dob: Optional[str] = None 
     nationality: Optional[str] = None
     race: Optional[str] = None
     occupation: Optional[str] = None
@@ -168,6 +168,89 @@ class UserRequest(BaseModel):
     status: Optional[str] = None
 
 
+class FrontendMessage(BaseModel):
+    messageId: str
+    conversationId: str
+    senderRole: str  # "Human" or "AI"
+    content: str
+    sentDate: str  
+
+class FrontendConversation(BaseModel):
+    conversationId: str
+    reportId: Optional[str]
+    creationDate: str  
+    messages: List[FrontendMessage]
+    summary: str  
+
+class ConversationListResponse(BaseModel):
+    conversations: List[FrontendConversation]
+
+
+class PublicReportSubmission(BaseModel):
+    first_name: str
+    last_name: str
+    contact_no: str
+    email: EmailStr
+    sex: Optional[str] = None
+    dob: Optional[str] = None
+    nationality: Optional[str] = None
+    race: Optional[str] = None
+    occupation: Optional[str] = None
+    blk: Optional[str] = None
+    street: Optional[str] = None
+    unit_no: Optional[str] = None
+    postcode: Optional[str] = None
+    role: Optional[str] = "reportee"
+
+    scam_incident_date: str
+    scam_report_date: Optional[str] = None
+    scam_type: Optional[str] = None
+    scam_approach_platform: Optional[str] = None
+    scam_communication_platform: Optional[str] = None
+    scam_transaction_type: Optional[str] = None
+    scam_beneficiary_platform: Optional[str] = None
+    scam_beneficiary_identifier: Optional[str] = None
+    scam_contact_no: Optional[str] = None
+    scam_email: Optional[str] = None
+    scam_moniker: Optional[str] = None
+    scam_url_link: Optional[str] = None
+    scam_amount_lost: Optional[float] = None
+    scam_incident_description: str
+    
+    conversation_id: Optional[int] = None
+
+    @field_validator('first_name', 'last_name')
+    def validate_names(cls, v: str) -> str:
+        v = v.strip().upper()
+        if len(v) < 2:
+            raise ValueError('Name must be at least 2 characters')
+        return v
+
+    @field_validator('contact_no')
+    def validate_contact_no(cls, v: str) -> str:
+        # Strip whitespace
+        v = v.strip()
+        # Check for optional '+' prefix
+        if v.startswith('+'):
+            digits = v[1:]
+        else:
+            digits = v
+        # Validate: digits only, at least 8
+        if not digits.isdigit() or len(digits) < 8:
+            raise ValueError('Contact number must have at least 8 digits (optional + prefix allowed)')
+        return v
+
+    @field_validator('scam_incident_description')
+    def validate_description(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError('Description cannot be empty')
+        return v
+
+class PublicReportResponse(BaseModel):
+    report_id: int
+    conversation_id: Optional[int]=None
+    message: str = "Report submitted successfully"
+
 
 
 #For auth-related schemas 
@@ -181,7 +264,7 @@ class TokenJson(BaseModel):
     token_type: str
 
 class SignInRequest(BaseModel):
-    email: EmailStr # Validates it's a real email format
+    email: EmailStr 
     password: str
 
 class TokenData(BaseModel):
@@ -190,10 +273,10 @@ class TokenData(BaseModel):
 class UserIn(BaseModel):  # For signup input
     email: EmailStr
     password: str
-    first_name: str  # Required for signup
-    last_name: str   # Required for signup
-    contact_no: str  # Required
-    role: Optional[str] = "INVESTIGATION OFFICER"  # Default role; adjust as needed
+    first_name: str 
+    last_name: str  
+    contact_no: str  
+    role: Optional[str] = "INVESTIGATION OFFICER"  
     sex: Optional[str] = None
     dob: Optional[str] = None
     nationality: Optional[str] = None
@@ -207,12 +290,11 @@ class UserIn(BaseModel):  # For signup input
     def validate_password(cls, v: str) -> str:
         if len(v) < 8:
             raise ValueError('Password must be at least 8 characters')
-        # Optional: Add complexity, e.g., if not any(c.isdigit() for c in v): raise ValueError('Must include digit')
         return v
 
     @field_validator('first_name', 'last_name')
     def validate_names(cls, v: str) -> str:
-        v = v.strip().upper()  # Trim and uppercase (standardize)
+        v = v.strip().upper()  
         if len(v) < 2:
             raise ValueError('Name too short (min 2 characters)')
         return v
@@ -263,105 +345,3 @@ class ResetPasswordRequest(BaseModel):
             raise ValueError('Password must be at least 8 characters')
         return v
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-class FrontendMessage(BaseModel):
-    messageId: str
-    conversationId: str
-    senderRole: str  # "Human" or "AI"
-    content: str
-    sentDate: str  # Formatted as 'dd/MM/yy HH:mm'
-
-class FrontendConversation(BaseModel):
-    conversationId: str
-    reportId: Optional[str]
-    creationDate: str  # Formatted as 'dd/MM/yy HH:mm'
-    messages: List[FrontendMessage]
-    summary: str  # Generated dynamically (e.g., truncated first message)
-
-class ConversationListResponse(BaseModel):
-    conversations: List[FrontendConversation]
-
-
-class PublicReportSubmission(BaseModel):
-    first_name: str
-    last_name: str
-    contact_no: str
-    email: EmailStr
-    sex: Optional[str] = None
-    dob: Optional[str] = None
-    nationality: Optional[str] = None
-    race: Optional[str] = None
-    occupation: Optional[str] = None
-    blk: Optional[str] = None
-    street: Optional[str] = None
-    unit_no: Optional[str] = None
-    postcode: Optional[str] = None
-    role: Optional[str] = "reportee"
-
-    scam_incident_date: str
-    scam_report_date: Optional[str] = None
-    scam_type: Optional[str] = None
-    scam_approach_platform: Optional[str] = None
-    scam_communication_platform: Optional[str] = None
-    scam_transaction_type: Optional[str] = None
-    scam_beneficiary_platform: Optional[str] = None
-    scam_beneficiary_identifier: Optional[str] = None
-    scam_contact_no: Optional[str] = None
-    scam_email: Optional[str] = None
-    scam_moniker: Optional[str] = None
-    scam_url_link: Optional[str] = None
-    scam_amount_lost: Optional[float] = None
-    scam_incident_description: str
-    
-    conversation_id: Optional[int] = None
-
-    @field_validator('first_name', 'last_name')
-    def validate_names(cls, v: str) -> str:
-        v = v.strip().upper()
-        if len(v) < 2:
-            raise ValueError('Name must be at least 2 characters')
-        return v
-
-    @field_validator('contact_no')
-    def validate_contact_no(cls, v: str) -> str:
-        if not v.startswith('+') or len(v) < 9:
-            raise ValueError('Contact number must start with + and have at least 8 digits')
-        return v
-
-    @field_validator('scam_incident_description')
-    def validate_description(cls, v: str) -> str:
-        if not v.strip():
-            raise ValueError('Description cannot be empty')
-        return v
-
-# Response model (unchanged)
-class PublicReportResponse(BaseModel):
-    report_id: int
-    conversation_id: Optional[int]=None
-    message: str = "Report submitted successfully"

@@ -40,6 +40,7 @@ def submit_public_report(
     """
     Public endpoint for submitting a scam report.
     Creates person, report, and link. No auth required.
+    Accessible by public users.
     """
     create_data = data.dict(exclude_unset=True)
     

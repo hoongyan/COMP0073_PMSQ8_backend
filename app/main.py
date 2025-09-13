@@ -14,11 +14,8 @@ from app.routers.users import users_router
 from app.routers.chat import chat_router
 from app.routers.public_reports import public_reports_router
 
-
-
 app = FastAPI(title="Persona Based Conversational AI Agent")
-
-    
+   
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[os.getenv("FRONTEND_URL", "http://localhost:3000")],  # update FRONTEND_URL to match Next.js app
@@ -28,7 +25,6 @@ app.add_middleware(
 )
 
 #Include routers 
-# app.include_router(router)
 app.include_router(auth_router)
 app.include_router(conversation_router)
 app.include_router(persons_router)

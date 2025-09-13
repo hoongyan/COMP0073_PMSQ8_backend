@@ -293,10 +293,12 @@ class ConversationManager:
 
                 response = self.police_chatbot.process_query(
                     query=query,
+                    messages=agent_history,
                     conversation_id=self.conversation_id
                 )
 
                 ai_response = response.get("response", "I'm sorry, there was an error processing your request.")
+                structured_data = response.get("structured_data", {})  # Safely get the structured_data dict from the agent's response
                 self.logger.info(f"AI response generated: {ai_response[:50]}...")
 
                 self._save_message(db, SenderRole.police, ai_response)
@@ -307,9 +309,23 @@ class ConversationManager:
                 db.commit()
                 self.logger.info(f"Query processed successfully for conv {self.conversation_id}")
                 return {
-                    "response": ai_response,
+                    "response": ai_response,  
                     "conversation_id": self.conversation_id,
-                    "structured_data": response.get("structured_data", {})
+                    "structured_data": {
+                        "scam_incident_date": structured_data.get("scam_incident_date", ""),
+                        "scam_type": structured_data.get("scam_type", ""),
+                        "scam_approach_platform": structured_data.get("scam_approach_platform", ""),
+                        "scam_communication_platform": structured_data.get("scam_communication_platform", ""),
+                        "scam_transaction_type": structured_data.get("scam_transaction_type", ""),
+                        "scam_beneficiary_platform": structured_data.get("scam_beneficiary_platform", ""),
+                        "scam_beneficiary_identifier": structured_data.get("scam_beneficiary_identifier", ""),
+                        "scam_contact_no": structured_data.get("scam_contact_no", ""),
+                        "scam_email": structured_data.get("scam_email", ""),
+                        "scam_moniker": structured_data.get("scam_moniker", ""),
+                        "scam_url_link": structured_data.get("scam_url_link", ""),
+                        "scam_amount_lost": structured_data.get("scam_amount_lost", 0),
+                        "scam_incident_description": structured_data.get("scam_incident_description", "")
+                    }
                 }
             except Exception as e:
                 db.rollback()
