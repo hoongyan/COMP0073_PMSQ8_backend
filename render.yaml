@@ -97,6 +97,23 @@ databases:
     user: admin
     # No ipAllowList: Auto-internal access for services
 
+jobs:
+  - type: job
+    name: db-setup
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    branch: main
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: comp0073_production_pgvector
+          property: connectionString
+      - key: SECRET_KEY
+        sync: false # If scripts need (set in dashboard if prompted)
+      - key: OPENAI_API_KEY
+        sync: false # If scripts need
+    startCommand: alembic -x sqlalchemy.url=$DATABASE_URL upgrade head && python scripts/init_db.py && python scripts/load_data.py --initialize-schema && python scripts/seed_loader.py --reset-sequences
+
   # - type: pserv # Private service for Ollama (internal only)
   #   name: comp0073_ollama
   #   runtime: docker
