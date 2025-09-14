@@ -61,15 +61,35 @@ services:
     plan: free
     branch: main
     healthCheckPath: /  # Dummy, since it won't serve traffic
-    envVars:  # Same as your worker
-      - key: DATABASE_URL
-        fromDatabase:
-          name: comp0073_production_pgvector
-          property: connectionString
-      - key: SECRET_KEY
-        sync: false
-      - key: OPENAI_API_KEY
-        sync: false
+    envVars:
+    - key: POSTGRES_USER
+      fromDatabase:
+        name: comp0073_production_pgvector
+        property: user
+    - key: POSTGRES_PASSWORD
+      fromDatabase:
+        name: comp0073_production_pgvector
+        property: password
+    - key: POSTGRES_DB
+      fromDatabase:
+        name: comp0073_production_pgvector
+        property: database
+    - key: POSTGRES_HOST
+      fromDatabase:
+        name: comp0073_production_pgvector
+        property: host
+    - key: POSTGRES_PORT
+      fromDatabase:
+        name: comp0073_production_pgvector
+        property: port
+    - key: DATABASE_URL  # This was already here—keep it!
+      fromDatabase:
+        name: comp0073_production_pgvector
+        property: connectionString
+    - key: SECRET_KEY
+      sync: false
+    - key: OPENAI_API_KEY
+      sync: false
     numInstances: 1
 
 databases:
@@ -78,3 +98,23 @@ databases:
     databaseName: comp0073
     user: admin
     # No ipAllowList: Auto-internal access for services
+
+
+
+  # - type: web  # Use 'web' instead of 'worker'
+  #   name: db-setup-temp
+  #   runtime: docker
+  #   dockerfilePath: ./Dockerfile.setup
+  #   plan: free
+  #   branch: main
+  #   healthCheckPath: /  # Dummy, since it won't serve traffic
+  #   envVars:  # Same as your worker
+  #     - key: DATABASE_URL
+  #       fromDatabase:
+  #         name: comp0073_production_pgvector
+  #         property: connectionString
+  #     - key: SECRET_KEY
+  #       sync: false
+  #     - key: OPENAI_API_KEY
+  #       sync: false
+  #   numInstances: 1
