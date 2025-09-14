@@ -1,0 +1,9 @@
+# existing base setup…
+COPY . /app
+WORKDIR /app
+
+
+CMD alembic -x sqlalchemy.url=$DATABASE_URL upgrade head && \
+    python scripts/init_db.py && \
+    python scripts/load_data.py --initialize-schema && \
+    python scripts/seed_loader.py --reset-sequences

@@ -92,26 +92,21 @@ services:
         sync: false # Set in dashboard if using
     numInstances: 1
 
-  - type: worker
-    name: db-setup
-    runtime: docker
-    dockerfilePath: ./Dockerfile
-    plan: free
-    branch: main
-    envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: comp0073_production_pgvector
-          property: connectionString
-      - key: SECRET_KEY
-        sync: false
-      - key: OPENAI_API_KEY
-        sync: false
-    startCommand: >
-      alembic -x sqlalchemy.url=$DATABASE_URL upgrade head &&
-      python scripts/init_db.py &&
-      python scripts/load_data.py --initialize-schema &&
-      python scripts/seed_loader.py --reset-sequences
+  # - type: worker
+  #   name: db-setup
+  #   runtime: docker
+  #   dockerfilePath: ./Dockerfile.setup 
+  #   plan: free
+  #   branch: main
+  #   envVars:
+  #     - key: DATABASE_URL
+  #       fromDatabase:
+  #         name: comp0073_production_pgvector
+  #         property: connectionString
+  #     - key: SECRET_KEY
+  #       sync: false
+  #     - key: OPENAI_API_KEY
+  #       sync: false
 
 databases:
   - name: comp0073_production_pgvector
