@@ -92,18 +92,11 @@ services:
         sync: false # Set in dashboard if using
     numInstances: 1
 
-databases:
-  - name: comp0073_production_pgvector
-    postgresMajorVersion: 17 # Supported in 2025; fallback to 16 if error
-    databaseName: comp0073
-    user: admin
-    # No ipAllowList: Auto-internal access for services
-
-jobs:
-  - type: job
+  - type: worker
     name: db-setup
     runtime: docker
     dockerfilePath: ./Dockerfile
+    plan: free
     branch: main
     envVars:
       - key: DATABASE_URL
@@ -120,7 +113,13 @@ jobs:
       python scripts/load_data.py --initialize-schema &&
       python scripts/seed_loader.py --reset-sequences
 
-      
+databases:
+  - name: comp0073_production_pgvector
+    postgresMajorVersion: 17 # Supported in 2025; fallback to 16 if error
+    databaseName: comp0073
+    user: admin
+    # No ipAllowList: Auto-internal access for services
+
   # - type: pserv # Private service for Ollama (internal only)
   #   name: comp0073_ollama
   #   runtime: docker
@@ -130,6 +129,5 @@ jobs:
   #   numInstances: 1
   #   # No envVars needed for Ollama basics
   # value: http://comp0073_ollama:11434 # Internal service resolution
-
 # #       - key: DATABASE_URL
 #         value: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
