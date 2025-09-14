@@ -22,10 +22,20 @@ class DatabaseManager:
         self.settings = get_settings()
         self.logger = setup_logger("DatabaseManager", self.settings.log.subdirectories["database"])
         try:
+            # Dynamically adjust URL to use psycopg dialect (handles both "postgresql://" and "postgres://" variants from Render)
+            db_url = self.settings.database.url
+            if db_url.startswith("postgresql://"):
+                db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
+            elif db_url.startswith("postgres://"):
+                db_url = db_url.replace("postgres://", "postgresql+psycopg://", 1)
             self.engine = create_engine(
-                self.settings.database.url,
+                db_url,
                 echo=self.settings.database.echo
             )
+            # self.engine = create_engine(
+            #     self.settings.database.url,
+            #     echo=self.settings.database.echo
+            # )
             self.session_factory = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
             self.logger.info("Database engine created successfully")
         except Exception as e:
