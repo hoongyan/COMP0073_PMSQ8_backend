@@ -34,7 +34,7 @@ services:
       - key: POSTGRES_USER # Add this
         fromDatabase:
           name: comp0073_production_pgvector
-          property: username
+          property: user
       - key: POSTGRES_PASSWORD # Add this
         fromDatabase:
           name: comp0073_production_pgvector
@@ -47,8 +47,6 @@ services:
         fromDatabase:
           name: comp0073_production_pgvector
           property: port
-      - key: OLLAMA_BASE_URL # Add this if using Ollama
-        value: http://comp0073_ollama:11434 # Internal service resolution
       - key: SECRET_KEY
         sync: false # Set in dashboard
       - key: OPENAI_API_KEY
