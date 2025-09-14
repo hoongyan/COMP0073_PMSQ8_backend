@@ -56,4 +56,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     initializer = DatabaseInitializer()
-    initializer.initialize_database()
+    # initializer.initialize_database()
+    initializer.initialize_database(skip_index=args.skip_index)
