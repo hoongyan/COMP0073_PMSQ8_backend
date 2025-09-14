@@ -11,7 +11,7 @@ services:
         fromDatabase:
           name: comp0073_production_pgvector
           property: connectionString # Auto: postgresql+psycopg://user:pass@host:port/db
-      # - key: OLLAMA_BASE_URL
+
         value: http://comp0073_ollama:11434 # Internal service resolution
       - key: SECRET_KEY
         sync: false # Set in dashboard
@@ -34,3 +34,4 @@ databases:
   #   branch: main
   #   numInstances: 1
   #   # No envVars needed for Ollama basics
+
