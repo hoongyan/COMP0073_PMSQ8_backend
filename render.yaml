@@ -37,21 +37,39 @@ services:
         sync: false # Set in dashboard if using
     numInstances: 1
 
-  - type: worker # This is the new one-time setup service
-    name: db-setup
+  # - type: worker # This is the new one-time setup service
+  #   name: db-setup
+  #   runtime: docker
+  #   dockerfilePath: ./Dockerfile.setup
+  #   plan: free
+  #   branch: main
+  #   envVars:
+  #     - key: DATABASE_URL
+  #       fromDatabase:
+  #         name: comp0073_production_pgvector
+  #         property: connectionString
+  #     - key: SECRET_KEY
+  #       sync: false # Set in dashboard if your scripts need it
+  #     - key: OPENAI_API_KEY
+  #       sync: false # If needed for scripts
+  #   numInstances: 1
+
+  - type: web  # Use 'web' instead of 'worker'
+    name: db-setup-temp
     runtime: docker
     dockerfilePath: ./Dockerfile.setup
     plan: free
     branch: main
-    envVars:
+    healthCheckPath: /  # Dummy, since it won't serve traffic
+    envVars:  # Same as your worker
       - key: DATABASE_URL
         fromDatabase:
           name: comp0073_production_pgvector
           property: connectionString
       - key: SECRET_KEY
-        sync: false # Set in dashboard if your scripts need it
+        sync: false
       - key: OPENAI_API_KEY
-        sync: false # If needed for scripts
+        sync: false
     numInstances: 1
 
 databases:
