@@ -1,58 +1,3 @@
-# services:
-#   - type: web
-#     name: comp0073_app
-#     runtime: docker
-#     dockerfilePath: ./Dockerfile
-#     plan: free # Upgrade to starter if needed for always-on (prevents spin-down)
-#     branch: main
-#     healthCheckPath: / # Or a valid endpoint like /health if you add one
-#     envVars:
-#       - key: DATABASE_URL
-#         fromDatabase:
-#           name: comp0073_production_pgvector
-#           property: connectionString # Auto: postgresql+psycopg://user:pass@host:port/db
-
-#       - key: SECRET_KEY
-#         sync: false # Set in dashboard
-#       - key: OPENAI_API_KEY
-#         sync: false # Set in dashboard if using
-#     numInstances: 1
-
-# services:
-#   - type: web
-#     name: comp0073_app
-#     runtime: docker
-#     dockerfilePath: ./Dockerfile
-#     plan: free # Upgrade to starter if needed for always-on (prevents spin-down)
-#     branch: main
-#     healthCheckPath: / # Or a valid endpoint like /health if you add one
-#     envVars:
-#       - key: DATABASE_URL
-#         fromDatabase:
-#           name: comp0073_production_pgvector
-#           property: connectionString # Auto: postgresql+psycopg://user:pass@host:port/db
-#       - key: POSTGRES_USER # Add this
-#         fromDatabase:
-#           name: comp0073_production_pgvector
-#           property: user
-#       - key: POSTGRES_PASSWORD # Add this
-#         fromDatabase:
-#           name: comp0073_production_pgvector
-#           property: password
-#       - key: POSTGRES_DB # Add this
-#         fromDatabase:
-#           name: comp0073_production_pgvector
-#           property: database
-#       - key: POSTGRES_PORT # Add this
-#         fromDatabase:
-#           name: comp0073_production_pgvector
-#           property: port
-#       - key: SECRET_KEY
-#         sync: false # Set in dashboard
-#       - key: OPENAI_API_KEY
-#         sync: false # Set in dashboard if using
-#     numInstances: 1
-
 services:
   - type: web
     name: comp0073_app
@@ -92,10 +37,10 @@ services:
         sync: false # Set in dashboard if using
     numInstances: 1
 
-  - type: worker  # This is the new one-time setup service
+  - type: worker # This is the new one-time setup service
     name: db-setup
     runtime: docker
-    dockerfilePath: ./Dockerfile.setup 
+    dockerfilePath: ./Dockerfile.setup
     plan: free
     branch: main
     envVars:
@@ -104,11 +49,10 @@ services:
           name: comp0073_production_pgvector
           property: connectionString
       - key: SECRET_KEY
-        sync: false  # Set in dashboard if your scripts need it
+        sync: false # Set in dashboard if your scripts need it
       - key: OPENAI_API_KEY
-        sync: false  # If needed for scripts
+        sync: false # If needed for scripts
     numInstances: 1
-
 
 databases:
   - name: comp0073_production_pgvector
@@ -116,15 +60,3 @@ databases:
     databaseName: comp0073
     user: admin
     # No ipAllowList: Auto-internal access for services
-
-  # - type: pserv # Private service for Ollama (internal only)
-  #   name: comp0073_ollama
-  #   runtime: docker
-  #   dockerfilePath: ./Dockerfile.ollama
-  #   plan: standard # Changed: $25/month for 2 CPU/4 GB RAM; upgrade to pro if OOM errors
-  #   branch: main
-  #   numInstances: 1
-  #   # No envVars needed for Ollama basics
-  # value: http://comp0073_ollama:11434 # Internal service resolution
-# #       - key: DATABASE_URL
-#         value: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
