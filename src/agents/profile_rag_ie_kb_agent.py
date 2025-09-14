@@ -53,7 +53,7 @@ class ProfileRAGIEKBAgent:
     retrieving augmented data (scams + strategies), extracting information, tracking slots,
     and updating its knowledge base with successful strategies.
     """
-    def __init__(self, model_name: str = "qwen2.5:7b", llm_provider: str = "Ollama", rag_csv_path: Optional[str] = None, temperature: float = 0.0):
+    def __init__(self, model_name: str = "gpt-4o-mini", llm_provider: str = "OpenAI", rag_csv_path: Optional[str] = None, temperature: float = 0.0):
         """Initialize the chatbot with LLM model, tools, prompts, and workflow."""
         self.settings = get_settings()
         self.logger = setup_logger("Augmented_PoliceAgent", self.settings.log.subdirectories["agent"])
@@ -264,8 +264,15 @@ class ProfileRAGIEKBAgent:
         for attempt in range(max_retries):
             try:
                 response = up_llm.invoke(prompt)
-                self.logger.debug(f"UserProfileAgent Response: {response.content}")
-                new_profile = json.loads(response.content)
+                # self.logger.debug(f"UserProfileAgent Response: {response.content}")
+                # new_profile = json.loads(response.content)
+
+                if self.llm_provider == "OpenAI":
+                    self.logger.debug(f"UserProfileAgent Response: {response.model_dump()}")
+                    new_profile = response.model_dump()  # Already a dict-like structure
+                else:
+                    self.logger.debug(f"UserProfileAgent Response: {response.content}")
+                    new_profile = json.loads(response.content)
                 if not isinstance(new_profile, dict):
                     raise ValueError("Invalid new_profile from LLM")
                 break

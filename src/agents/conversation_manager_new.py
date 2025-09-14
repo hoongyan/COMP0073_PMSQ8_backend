@@ -198,8 +198,8 @@ class ConversationManager:
     """
     def __init__(
         self,
-        police_model_name: str = "granite3.2:8b",
-        police_llm_provider: str = "Ollama",
+        police_model_name: str = "gpt-4o-mini", #granite3.2:8b
+        police_llm_provider: str = "OpenAI",
         max_turns: int = 10,  # Kept but unused
         json_file: str = "data/victim_profile/victim_details.json"  # Kept but unused
     ):
