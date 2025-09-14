@@ -21,7 +21,12 @@ COPY . .
 #     python scripts/load_data.py --initialize-schema && \
 #     python scripts/seed_loader.py --reset-sequences
 
-CMD python scripts/setup/init_db.py && \
+# CMD python scripts/setup/init_db.py && \
+#     alembic -x sqlalchemy.url=$DATABASE_URL upgrade head && \
+#     python scripts/setup/load_data.py --initialize-schema && \
+#     python scripts/setup/seed_loader.py --reset-sequences
+
+CMD python scripts/setup/init_db.py --skip-index && \
     alembic -x sqlalchemy.url=$DATABASE_URL upgrade head && \
     python scripts/setup/load_data.py --initialize-schema && \
     python scripts/setup/seed_loader.py --reset-sequences
