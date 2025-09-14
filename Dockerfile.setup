@@ -16,7 +16,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Run the setup commands
-CMD alembic -x sqlalchemy.url=$DATABASE_URL upgrade head && \
-    python scripts/init_db.py && \
-    python scripts/load_data.py --initialize-schema && \
-    python scripts/seed_loader.py --reset-sequences
+# CMD alembic -x sqlalchemy.url=$DATABASE_URL upgrade head && \
+#     python scripts/init_db.py && \
+#     python scripts/load_data.py --initialize-schema && \
+#     python scripts/seed_loader.py --reset-sequences
+
+CMD python scripts/setup/init_db.py && \
+    alembic -x sqlalchemy.url=$DATABASE_URL upgrade head && \
+    python scripts/setup/load_data.py --initialize-schema && \
+    python scripts/setup/seed_loader.py --reset-sequences
