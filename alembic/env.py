@@ -23,6 +23,7 @@ if not DATABASE_URL:
 # access to the values within the .ini file in use.
 config = context.config
 
+
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
@@ -39,6 +40,12 @@ target_metadata = Base.metadata
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
+# Override sqlalchemy.url with DATABASE_URL if set (fixes Render)
+if DATABASE_URL:
+    # Ensure correct dialect for psycopg (Render may use 'postgresql://')
+    if DATABASE_URL.startswith('postgresql://'):
+        DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg://', 1)
+    config.set_main_option('sqlalchemy.url', DATABASE_URL)
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
