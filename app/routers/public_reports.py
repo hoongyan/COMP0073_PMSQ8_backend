@@ -18,7 +18,6 @@ public_reports_router = APIRouter(
     tags=["public_reports"],
 )
 
-# Combined uppercase fields from persons.py and reports.py
 PERSON_FIELDS_TO_UPPERCASE = [
     'first_name', 'last_name', 'nationality', 'race', 'occupation',
     'blk', 'street', 'unit_no', 'postcode'
@@ -44,14 +43,14 @@ def submit_public_report(
     """
     create_data = data.dict(exclude_unset=True)
     
-    # Explicit required fields check (standardized from both files)
+    #Required fields check
     person_required = ['first_name', 'last_name', 'contact_no', 'email']
     report_required = ['scam_incident_date', 'scam_incident_description']
     missing = [field for field in person_required + report_required if field not in create_data or create_data[field] is None]
     if missing:
         raise HTTPException(status_code=400, detail=f"Missing required fields: {', '.join(missing)}")
     
-    # Step 1: Prepare person data with uppercasing (using list like originals)
+    # Prepare person data with uppercasing
     person_data = {k: create_data.get(k) for k in PersonDetails.__table__.columns.keys() if k in create_data}
     for field in PERSON_FIELDS_TO_UPPERCASE:
         if field in person_data and isinstance(person_data[field], str):
@@ -61,11 +60,10 @@ def submit_public_report(
             person_data['dob'] = datetime.strptime(person_data['dob'], "%Y-%m-%d").date()
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid format for dob (use YYYY-MM-DD)")
-    # Extra validation (kept as improvement)
     if person_data.get("dob") and person_data["dob"] > date.today():
         raise HTTPException(status_code=400, detail="Date of birth cannot be in the future")
 
-    # Step 2: Prepare report data with uppercasing and embedding
+    # Prepare report data with uppercasing and embedding
     report_data = {k: create_data.get(k) for k in ScamReports.__table__.columns.keys() if k in create_data}
     for field in REPORT_FIELDS_TO_UPPERCASE:
         if field in report_data and isinstance(report_data[field], str):
@@ -75,11 +73,10 @@ def submit_public_report(
     report_data["status"] = ReportStatus.unassigned
     report_data["io_in_charge"] = None
     
-    # Date validation (kept as improvement)
     if report_data["scam_incident_date"] > report_data["scam_report_date"] or report_data["scam_report_date"] > date.today():
         raise HTTPException(status_code=400, detail="Invalid dates: incident_date <= report_date <= today")
     
-    # Embedding (matches reports.py)
+    # Embedding 
     embedding = vector_store.get_embedding(report_data["scam_incident_description"])
     report_data["embedding"] = embedding
 
@@ -89,7 +86,7 @@ def submit_public_report(
     except KeyError:
         raise HTTPException(status_code=400, detail=f"Invalid role: '{role_str}'. Must be one of: victim, suspect, witness, reportee")
     
-    # Step 3: Create records (unchanged)
+    #Create records
     person_crud = CRUDOperations(PersonDetails)
     report_crud = CRUDOperations(ScamReports)
     link_crud = CRUDOperations(ReportPersonsLink)
@@ -104,7 +101,7 @@ def submit_public_report(
         if not new_report:
             raise HTTPException(status_code=500, detail="Failed to create report record")
 
-        # Link with specified role (UPDATED: Uses link_role instead of fixed victim)
+        # Link with specified role 
         link_data = {
             "report_id": new_report.report_id,
             "person_id": new_person.person_id,
@@ -114,7 +111,7 @@ def submit_public_report(
         if not new_link:
             raise HTTPException(status_code=500, detail="Failed to link person to report")
 
-        # NEW: If conversation_id provided, link it to the new report
+        # If conversation_id provided, link it to the new report
         linked_conv_id = None
         if data.conversation_id:
             conversation = db.query(Conversations).filter(Conversations.conversation_id == data.conversation_id).first()
@@ -129,7 +126,6 @@ def submit_public_report(
 
         return PublicReportResponse(report_id=new_report.report_id, conversation_id=linked_conv_id)
     
-
     except SQLAlchemyError as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")

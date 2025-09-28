@@ -14,7 +14,7 @@ from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.graph import StateGraph, END, START
-from sqlalchemy.orm import Session  # Added for type hints
+from sqlalchemy.orm import Session 
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
 from src.models.response_model import UserProfile, PoliceResponse, RetrievalOutput, PoliceResponseSlots, KnowledgeBaseOutput, RagOutput
@@ -63,11 +63,10 @@ class ProfileRAGIEKBAgent:
         
         # Initialize tools and database
         self.police_tools = PoliceTools(rag_csv_path=rag_csv_path)
-        self.db_manager = DatabaseManager()  # Store for session creation
+        self.db_manager = DatabaseManager() 
         self.vector_store = VectorStore(self.db_manager.session_factory)
-        # self.strategy_crud = CRUDOperations(Strategies)  # Fixed: Only model
         self.strategy_crud = StrategiesCRUD()
-        self.user_profile_prompt = ChatPromptTemplate.from_template(Prompt.template["user_profile_test"])
+        self.user_profile_prompt = ChatPromptTemplate.from_template(Prompt.template["user_profile"])
         self.rag_prompt_template = ChatPromptTemplate.from_template(Prompt.template["rag_agent"])
         self.ie_prompt = ChatPromptTemplate.from_messages([
             ("system", Prompt.template["ie"]),
@@ -246,7 +245,7 @@ class ProfileRAGIEKBAgent:
         return updates
     
     def user_profile_agent(self, state: GraphState):
-        """Infer and update user profile from query and history using exponential smoothing."""
+        """Infer and update user profile from query and history."""
         up_llm = self._get_llm(UserProfile)
         extracted_queries = [msg.content for msg in state["messages"] if isinstance(msg, HumanMessage)]
         prompt = self.user_profile_prompt.format(query_history=extracted_queries, query=state["query"])
@@ -264,8 +263,6 @@ class ProfileRAGIEKBAgent:
         for attempt in range(max_retries):
             try:
                 response = up_llm.invoke(prompt)
-                # self.logger.debug(f"UserProfileAgent Response: {response.content}")
-                # new_profile = json.loads(response.content)
 
                 if self.llm_provider == "OpenAI":
                     self.logger.debug(f"UserProfileAgent Response: {response.model_dump()}")
@@ -326,7 +323,7 @@ class ProfileRAGIEKBAgent:
         return updates
 
     def retrieval_agent(self, state: GraphState):
-        """Retrieve similar scam reports and strategies; generate suggestions for extraction."""
+        """Retrieve similar scam reports and strategies; generate suggestions for scam specific details to aid extraction."""
         tool = self.police_tools.get_augmented_tools()[0]
         extracted_queries = [msg.content for msg in state["messages"] if isinstance(msg, HumanMessage)]
         user_query = build_query_with_history(state["query"], extracted_queries)
@@ -379,7 +376,7 @@ class ProfileRAGIEKBAgent:
         }
 
     def ie_agent(self, state: GraphState):
-        """Extract structured scam info and generate conversational response using LLM."""
+        """Extract structured scam info and generate conversational response using LLM based on inferred user profiles as well as RAG suggestions and strategies."""
         ie_llm = self._get_llm(schema=PoliceResponse)
         prev_ie = state["prev_turn_data"].get("prev_ie_output", {})
         prompt = self.ie_prompt.format(
@@ -563,7 +560,7 @@ class ProfileRAGIEKBAgent:
             return {"response": "Query cannot be empty", "structured_data": {}, "rag_invoked": False, "conversation_id": conversation_id}
         
         if messages is not None:
-            self.messages = messages  # Override internal state with DB-loaded history
+            self.messages = messages  
         
         self.logger.info(f"Entering process_query - Persisted self.initial_profile: {self.initial_profile}")
         self.messages.append(HumanMessage(content=query))

@@ -39,6 +39,7 @@ class DataSettings(BaseModel):
     # Person details data path
     person_details_csv: str = Field(default="data/person_details/person_details.csv", description="Path to victim details CSV file for database ingestion")
     person_details_csv_processed: str = Field(default="data/person_details/person_details_processed.csv")
+    
     # Strategy seed data path
     strategy_seed_json: str = Field(default="data/strategy/strategy_seed_augmented.json", description="Path to strategy seed JSON file")
     
@@ -116,7 +117,7 @@ def get_settings() -> Settings:
         raise ValueError(f"Missing environment variables: {missing}")
     
     settings = Settings(
-        log=LogSettings(directory=os.getenv("LOG_DIRECTORY", "logs")), #defaults to log if LOG_DIRECTORY is not set in .env
+        log=LogSettings(directory=os.getenv("LOG_DIRECTORY", "logs")),
         database=DatabaseSettings(
             url=database_url,
             user=postgres_user,

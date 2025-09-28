@@ -1,9 +1,5 @@
-# existing base setup…
-# Base image: Python 3.12 (matches your code's needs)
-FROM python:3.12-slim
 
-# # Install libpq-dev for psycopg to work (Postgres client library) and gcc for builds
-# RUN apt-get update && apt-get install -y libpq-dev gcc && rm -rf /var/lib/apt/lists/*
+FROM python:3.12-slim
 
 # Set working dir
 WORKDIR /app
@@ -15,16 +11,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy all code
 COPY . .
 
-# Run the setup commands
-# CMD alembic -x sqlalchemy.url=$DATABASE_URL upgrade head && \
-#     python scripts/init_db.py && \
-#     python scripts/load_data.py --initialize-schema && \
-#     python scripts/seed_loader.py --reset-sequences
-
-# CMD python scripts/setup/init_db.py && \
-#     alembic -x sqlalchemy.url=$DATABASE_URL upgrade head && \
-#     python scripts/setup/load_data.py --initialize-schema && \
-#     python scripts/setup/seed_loader.py --reset-sequences
 
 CMD python scripts/setup/init_db.py --skip-index && \
     alembic -x sqlalchemy.url=$DATABASE_URL upgrade head && \

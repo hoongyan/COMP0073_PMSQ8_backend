@@ -1,7 +1,0 @@
-FROM ollama/ollama:latest
-
-# Pull your model during build (downloads ~5-10GB, takes time but saves runtime)
-RUN ollama serve & sleep 10 && ollama pull granite3.2:8b
-
-EXPOSE 11434
-CMD ["serve"]

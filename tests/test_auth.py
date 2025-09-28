@@ -1,11 +1,10 @@
-# tests/test_auth.py
 import pytest
 from fastapi import status
 from app.main import app
 from app.dependencies.auth import get_current_active_user
 from sqlalchemy.exc import SQLAlchemyError
-from src.models.data_model import UserRole, UserStatus, Users  # Your models/enums
-from app.dependencies.auth import authenticate_user, create_access_token, get_password_hash  # Functions to mock
+from src.models.data_model import UserRole, UserStatus, Users  
+from app.dependencies.auth import authenticate_user, create_access_token, get_password_hash 
 
 @pytest.mark.parametrize(
     "form_data, mock_auth_result, expected_status, expected_detail",

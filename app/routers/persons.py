@@ -70,7 +70,6 @@ def create_person_endpoint(
 ):
     """
     Create a new person.
-    - All fields except person_id are required.
     Accessible by any active authenticated user (Admin, IO, Analyst).
     """
     create_data = data.dict(exclude_unset=True)

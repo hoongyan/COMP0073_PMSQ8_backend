@@ -35,7 +35,6 @@ def analyst_role(db: db_dependency, current_user: Users = Depends(get_current_ac
         raise HTTPException(status_code=403, detail="Unauthorized: Analyst access required")
     return current_user
 
-# Optional: A general "authenticated" role for any active user
 def any_role(db: db_dependency, current_user: Users = Depends(get_current_active_user)):
     """
     Dependency to allow any active authenticated user.

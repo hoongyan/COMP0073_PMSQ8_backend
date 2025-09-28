@@ -40,7 +40,7 @@ target_metadata = Base.metadata
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
-# Override sqlalchemy.url with DATABASE_URL if set (fixes Render)
+# Override sqlalchemy.url with DATABASE_URL if set 
 if DATABASE_URL:
     # Ensure correct dialect for psycopg (Render may use 'postgresql://')
     if DATABASE_URL.startswith('postgresql://'):

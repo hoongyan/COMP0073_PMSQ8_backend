@@ -3,9 +3,9 @@ from fastapi import status
 import datetime
 from sqlalchemy.exc import SQLAlchemyError
 from app.main import app
-from src.models.data_model import Conversations, Messages, SenderRole, UserRole, Users  # Models/enums
-from app.dependencies.roles import admin_role  # Role dependency
-from app.model import ConversationListResponse  # Your response model
+from src.models.data_model import Conversations, Messages, SenderRole, UserRole, Users  
+from app.dependencies.roles import admin_role  
+from app.model import ConversationListResponse 
 
 @pytest.mark.parametrize(
     "mock_conversations, expected_status, expected_count, expected_detail",

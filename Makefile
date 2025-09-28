@@ -9,7 +9,7 @@ setup:
 	./scripts/setup/setup.sh
 	python scripts/setup/init_db.py
 	python scripts/setup/load_data.py
-		python scripts/setup/seed_loader.py
+	python scripts/setup/seed_loader.py
 
 preload:  
 	@echo "Preloading data into existing database..."

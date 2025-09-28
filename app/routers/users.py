@@ -99,7 +99,6 @@ def create_user_endpoint(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid format for dob (use YYYY-MM-DD)")
     
-    # Handle role: Map string to enum
     role_map = {member.value.upper(): member for member in UserRole}
     try:
         create_data['role'] = role_map[create_data['role'].upper()]

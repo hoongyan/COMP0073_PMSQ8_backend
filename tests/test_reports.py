@@ -4,12 +4,10 @@ from unittest.mock import MagicMock
 from datetime import date
 
 from app.main import app 
+from src.database.vector_operations import VectorStore
 from src.models.data_model import ScamReports, Users, ReportPersonsLink, PersonDetails, ReportStatus, PersonRole
 from app.model import ScamReportListResponse, ScamReportResponse, ReportRequest, LinkedPerson, LinkedPersonCreate
 from app.routers.reports import CRUDOperations
-from src.database.vector_operations import VectorStore
-
-# Import the dependency to override
 from app.routers.reports import get_vector_store
 
 # Fixtures for mock objects
@@ -68,8 +66,6 @@ def mock_link(mock_report, mock_person):
     link.person = mock_person  
     return link
 
-# Tests
-
 def test_get_reports(client: TestClient, mock_db: MagicMock, mock_report, mock_io, mock_link):
     """Test GET /reports/ - retrieve list of reports with pagination."""
     mock_report.io = mock_io
@@ -91,7 +87,7 @@ def test_get_reports(client: TestClient, mock_db: MagicMock, mock_report, mock_i
     assert len(data["reports"][0]["linked_persons"]) == 1
     assert data["reports"][0]["linked_persons"][0]["role"] == "victim"
 
-    # Verify query calls (ensures joinedload was used)
+    # Verify query calls
     mock_db.query.assert_called_once_with(ScamReports)
 
 @pytest.mark.parametrize("invalid_params, expected_status", [

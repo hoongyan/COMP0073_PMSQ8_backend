@@ -3,9 +3,9 @@ services:
     name: comp0073_app
     runtime: docker
     dockerfilePath: ./Dockerfile
-    plan: free # Upgrade to starter if needed for always-on (prevents spin-down)
+    plan: standard # Upgraded to match render plan
     branch: main
-    healthCheckPath: /docs # Or a valid endpoint like /health if you add one
+    healthCheckPath: /docs
     envVars:
       - key: POSTGRES_USER
         fromDatabase:
@@ -34,87 +34,50 @@ services:
       - key: SECRET_KEY
         sync: false # Set in dashboard
       - key: OPENAI_API_KEY
-        sync: false # Set in dashboard if using
+        sync: false # Set in dashboard
     numInstances: 1
 
-  # - type: worker # This is the new one-time setup service
-  #   name: db-setup
-  #   runtime: docker
-  #   dockerfilePath: ./Dockerfile.setup
-  #   plan: free
-  #   branch: main
-  #   envVars:
-  #     - key: DATABASE_URL
-  #       fromDatabase:
-  #         name: comp0073_production_pgvector
-  #         property: connectionString
-  #     - key: SECRET_KEY
-  #       sync: false # Set in dashboard if your scripts need it
-  #     - key: OPENAI_API_KEY
-  #       sync: false # If needed for scripts
-  #   numInstances: 1
-
-  - type: web  # Use 'web' instead of 'worker'
-    name: db-setup-temp
-    runtime: docker
-    dockerfilePath: ./Dockerfile.setup
-    plan: free
-    branch: main
-    healthCheckPath: /  # Dummy, since it won't serve traffic
-    envVars:
-    - key: POSTGRES_USER
-      fromDatabase:
-        name: comp0073_production_pgvector
-        property: user
-    - key: POSTGRES_PASSWORD
-      fromDatabase:
-        name: comp0073_production_pgvector
-        property: password
-    - key: POSTGRES_DB
-      fromDatabase:
-        name: comp0073_production_pgvector
-        property: database
-    - key: POSTGRES_HOST
-      fromDatabase:
-        name: comp0073_production_pgvector
-        property: host
-    - key: POSTGRES_PORT
-      fromDatabase:
-        name: comp0073_production_pgvector
-        property: port
-    - key: DATABASE_URL  # This was already here—keep it!
-      fromDatabase:
-        name: comp0073_production_pgvector
-        property: connectionString
-    - key: SECRET_KEY
-      sync: false
-    - key: OPENAI_API_KEY
-      sync: false
-    numInstances: 1
+#Once-off database setup service (to run migrations and create tables -- uncomment if redeploying)
+# - type: web
+#   name: db-setup-temp
+#   runtime: docker
+#   dockerfilePath: ./Dockerfile.setup
+#   plan: free
+#   branch: main
+#   healthCheckPath: / # Dummy, since it won't serve traffic
+#   envVars:
+#     - key: POSTGRES_USER
+#       fromDatabase:
+#         name: comp0073_production_pgvector
+#         property: user
+#     - key: POSTGRES_PASSWORD
+#       fromDatabase:
+#         name: comp0073_production_pgvector
+#         property: password
+#     - key: POSTGRES_DB
+#       fromDatabase:
+#         name: comp0073_production_pgvector
+#         property: database
+#     - key: POSTGRES_HOST
+#       fromDatabase:
+#         name: comp0073_production_pgvector
+#         property: host
+#     - key: POSTGRES_PORT
+#       fromDatabase:
+#         name: comp0073_production_pgvector
+#         property: port
+#     - key: DATABASE_URL # This was already here—keep it!
+#       fromDatabase:
+#         name: comp0073_production_pgvector
+#         property: connectionString
+#     - key: SECRET_KEY
+#       sync: false
+#     - key: OPENAI_API_KEY
+#       sync: false
+#   numInstances: 1
 
 databases:
   - name: comp0073_production_pgvector
-    postgresMajorVersion: 17 # Supported in 2025; fallback to 16 if error
+    postgresMajorVersion: 17
     databaseName: comp0073
     user: admin
-    # No ipAllowList: Auto-internal access for services
-
-
-
-  # - type: web  # Use 'web' instead of 'worker'
-  #   name: db-setup-temp
-  #   runtime: docker
-  #   dockerfilePath: ./Dockerfile.setup
-  #   plan: free
-  #   branch: main
-  #   healthCheckPath: /  # Dummy, since it won't serve traffic
-  #   envVars:  # Same as your worker
-  #     - key: DATABASE_URL
-  #       fromDatabase:
-  #         name: comp0073_production_pgvector
-  #         property: connectionString
-  #     - key: SECRET_KEY
-  #       sync: false
-  #     - key: OPENAI_API_KEY
-  #       sync: false
-  #   numInstances: 1

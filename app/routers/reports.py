@@ -99,7 +99,6 @@ def create_report_endpoint(
 ):
     """
     Create a new scam report.
-    - Required fields: scam_incident_date, scam_report_date, scam_incident_description (must be non-empty).
     Accessible by any active authenticated user (Admin, IO, Analyst).
     """
     create_data = data.dict(exclude_unset=True)
@@ -317,7 +316,6 @@ def get_linked_persons_endpoint(
 ):
     """
     Retrieve linked persons for a report by report_id.
-    Returns list of {id: str, name: str, role: str (lowercase)}.
     Accessible by any active authenticated user (Admin, IO, Analyst).
     """
     try:

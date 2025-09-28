@@ -78,10 +78,10 @@ def test_create_person(client: TestClient, mock_db: MagicMock, mocker, mock_pers
     response = client.post("/persons/", json=payload)
     assert response.status_code == 200
     data = response.json()
-    assert data["first_name"] == "JANE"  # Uppercased
+    assert data["first_name"] == "JANE" 
     assert data["person_id"] == 2
 
-    # Verify CRUD call with processed data
+    # Verify CRUD call
     expected_data = {
         "first_name": "JANE",
         "last_name": "DOE",

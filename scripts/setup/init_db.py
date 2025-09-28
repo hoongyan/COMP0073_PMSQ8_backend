@@ -30,16 +30,12 @@ class DatabaseInitializer:
                 self.logger.error("Failed to enable pgvector extension")
                 raise RuntimeError("Failed to enable pgvector extension")
             
-            if not skip_index:  # NEW: Only create index if not skipping
+            if not skip_index:  
                 # Create HNSW index for scam_report and strategy table
                 if not self.db_manager.create_hnsw_index("scam_reports", column_name="embedding"):
                     self.logger.error("Failed to create HNSW index")
                     raise RuntimeError("Failed to create HNSW index")
-            
-            # # Create HNSW index for scam_report and strategy table
-            # if not self.db_manager.create_hnsw_index("scam_reports", column_name="embedding"):
-            #     self.logger.error("Failed to create HNSW index")
-            #     raise RuntimeError("Failed to create HNSW index")
+        
             
             self.logger.info("Database extensions and indexes initialized successfully")
             print("Database extensions and indexes initialized successfully")
@@ -50,11 +46,9 @@ class DatabaseInitializer:
             raise
 
 if __name__ == "__main__":
-    # NEW: Add argument parser for --skip-index
     parser = argparse.ArgumentParser(description="Initialize the database extensions and indexes.")
     parser.add_argument("--skip-index", action="store_true", help="Skip creating the HNSW index")
     args = parser.parse_args()
     
     initializer = DatabaseInitializer()
-    # initializer.initialize_database()
     initializer.initialize_database(skip_index=args.skip_index)

@@ -3,7 +3,7 @@
 # Exit on any error
 set -e
 
-# Guard: Check if running inside a Docker container (prevent accidental exec)
+# Check if running inside a Docker container (prevent accidental exec)
 if [ -f /.dockerenv ]; then
     echo "Error: This script must be run on the host machine, not inside a container."
     exit 1

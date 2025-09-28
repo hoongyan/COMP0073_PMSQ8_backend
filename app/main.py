@@ -5,7 +5,6 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# from app.route import router
 from app.routers.auth import auth_router
 from app.routers.conversations import conversation_router
 from app.routers.persons import persons_router

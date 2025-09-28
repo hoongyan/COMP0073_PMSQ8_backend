@@ -41,7 +41,6 @@ def set_admin_role(mock_db: MagicMock):
     mock_current_user = app.dependency_overrides[get_current_active_user]()
     mock_current_user.role = UserRole.admin
     yield
-    # Cleanup if needed
 
 
 def test_get_users(client: TestClient, mock_db: MagicMock, mocker, mock_user, set_admin_role):
@@ -102,7 +101,7 @@ def test_create_user(client: TestClient, mock_db: MagicMock, mocker, mock_user, 
     assert data["role"] == "ANALYST"
     assert data["status"] == "PENDING"
 
-    # Verify CRUD call with processed data
+    # Verify CRUD call
     expected_data = {
         "password": fixed_hash,  # Hashed
         "first_name": "NEW",

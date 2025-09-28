@@ -16,14 +16,14 @@ from app.model import Token, TokenJson, SignInRequest, UserIn, UserRead
 
 auth_router = APIRouter(prefix="/api/auth")  
 
-ACCESS_TOKEN_EXPIRE_MINUTES = 60  #adjust as needed 
+ACCESS_TOKEN_EXPIRE_MINUTES = 60  #Adjust accordingly
 
 @auth_router.post("/token", response_model=Token)
 def login_for_access_token(db: db_dependency,
     form_data: OAuth2PasswordRequestForm = Depends()
 ):
     """
-    OAuth2-compatible login endpoint. Use for form-based auth (e.g., in Postman).
+    OAuth2-compatible login endpoint. Use for form-based auth.
     Returns JWT access token if credentials valid.
     """
     user = authenticate_user(form_data.username, form_data.password, db)  # Note: Using 'username' for form, but it's email
@@ -85,7 +85,6 @@ def sign_up(user_in: UserIn, db: db_dependency):
     # Hash the password
     hashed_password = get_password_hash(user_in.password)
     
-    # Map role string (value) to enum member
     role_map = {member.value.upper(): member for member in UserRole}  
     if user_in.role:
         try:

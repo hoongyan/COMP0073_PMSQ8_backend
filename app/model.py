@@ -72,8 +72,8 @@ class ReportRequest(BaseModel):
     scam_url_link: Optional[str] = None
     scam_amount_lost: Optional[float] = None
     scam_incident_description: Optional[str] = None
-    status: Optional[str] = None  # e.g., "assigned" (converted to uppercase enum like "ASSIGNED")
-    io_in_charge: Optional[int] = None  # Foreign key to user_id
+    status: Optional[str] = None  
+    io_in_charge: Optional[int] = None  
     
     
 class ScamReportListResponse(BaseModel):
@@ -155,7 +155,7 @@ class UserRequest(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     sex: Optional[str] = None
-    dob: Optional[str] = None  # String input, convert to date
+    dob: Optional[str] = None  
     nationality: Optional[str] = None
     race: Optional[str] = None
     contact_no: Optional[str] = None
@@ -332,9 +332,6 @@ class UserRead(BaseModel):  # For profile output (no password)
     contact_no: str
     role: str
     status: str
-
-
-
 
 class ResetPasswordRequest(BaseModel):
     password: str

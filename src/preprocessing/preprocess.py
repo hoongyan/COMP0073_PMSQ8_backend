@@ -10,7 +10,6 @@ from abc import abstractmethod
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.database.vector_operations import VectorStore
-# from src.preprocessing.generator.victim_profile.personas import PersonaGenerator
 from src.preprocessing.generator.scam_report.scam_details import ScamDetailsGenerator
 from config.settings import get_settings
 from config.logging_config import setup_logger
@@ -169,105 +168,32 @@ class PersonPreprocessor(Preprocessor):
     """Preprocessor for person details data, excluding NRIC."""
     
     def _get_default_input_file(self) -> str:
+        """Return the default input file path for person details preprocessing."""
+    
         return self.settings.data.person_details_csv  
     
     def _get_default_output_file(self) -> str:
+        """Return the default output file path for person details preprocessing."""
+        
         return self.settings.data.person_details_csv_processed  
     
     def preprocess(self, input_file: Optional[str] = None, output_file: Optional[str] = None) -> pd.DataFrame:
+        """Preprocess person details data for database ingestion."""
+        
         self.logger.info(f"Starting person preprocessing with input_file={input_file}, output_file={output_file}")
         df = self.load_data(input_file)
         
-        # Drop NRIC
         if 'nric' in df.columns:
             df = df.drop(columns=['nric'])
         
-        # Parse DOB to date
         df['dob'] = pd.to_datetime(df['dob']).dt.date
         
-        # Map "NA" to None for nullables (e.g., contact_no, email)
         for col in df.columns:
             df[col] = df[col].apply(lambda x: None if x == "NA" else x)
         
-        self.save_data(df, output_file)  # Saves as CSV
+        self.save_data(df, output_file)  
         return df
 
-# class VictimProfilePreprocessor(Preprocessor):
-#     """
-#     Preprocessor for victim chatbot data to create consolidated victim_details.json that includes victim persona (tech_literacy, language_proficiency and emotional_state) and scam details for evaluation.
-#     """
-    
-#     def _get_default_input_file(self) -> str:
-#         """
-#         Return the default input file path for victim profile preprocessing.
-#         Since this preprocessor generates data programmatically, no default input file is needed.
-#         Returning None to indicate no file loading is required. 
-#         """
-#         return None
-
-#     def _get_default_output_file(self) -> str:
-#         """Return the default output file path for victim profile preprocessing."""
-#         return self.settings.data.victim_details_json
-    
-#     def preprocess(self, num_records_per_domain: int = 2, input_file: Optional[str] = None, output_file: Optional[str] = None) -> List[Dict[str, Dict]]:
-#         scam_types = ['ecommerce', 'phishing', 'government officials impersonation']
-#         scam_generator = ScamDetailsGenerator()
-        
-#         # Generate scams separately for each domain
-#         domain_scams = {}
-#         for domain in scam_types:
-#             proportions = {domain: 1.0}  # 100% for this domain
-#             scam_df = scam_generator.generate_scam_dataframe(
-#                 total_records=num_records_per_domain,
-#                 proportions=proportions,
-#                 output_file=None
-#             )
-#             domain_scams[domain] = scam_df.to_dict(orient='records')
-        
-#         persona_gen = PersonaGenerator()
-        
-#         # Generate all 27 unique profile combinations
-#         profile_combinations = persona_gen.generate_all_permutation_targets()
-        
-#         processed_data = []
-#         profile_id_counter = 1  # Start sequential ID from 1
-        
-#         for domain in scam_types:
-#             scams = domain_scams[domain]
-#             # Shuffle scams for random pairing
-#             random.shuffle(scams)
-            
-#             for i, user_profile in enumerate(profile_combinations):
-#                 # Cycle through scams if somehow fewer than 27 (though should be exact)
-#                 scam_row = scams[i % len(scams)]
-                
-#                 scam_details = {
-#                     "scam_report_no": scam_row["scam_report_no"],
-#                     "scam_incident_date": scam_row["scam_incident_date"].strftime('%Y-%m-%d') if isinstance(scam_row["scam_incident_date"], datetime) else scam_row["scam_incident_date"],
-#                     "scam_report_date": scam_row["scam_report_date"].strftime('%Y-%m-%d') if isinstance(scam_row["scam_report_date"], datetime) else scam_row["scam_report_date"],
-#                     "scam_type": scam_row["scam_type"],
-#                     "scam_approach_platform": scam_row.get("scam_approach_platform", "NA"),
-#                     "scam_communication_platform": scam_row.get("scam_communication_platform", "NA"),
-#                     "scam_transaction_type": scam_row.get("scam_transaction_type", "NA"),
-#                     "scam_beneficiary_platform": scam_row.get("scam_beneficiary_platform", "NA"),
-#                     "scam_beneficiary_identifier": scam_row.get("scam_beneficiary_identifier", "NA"),
-#                     "scam_contact_no": str(scam_row.get("scam_contact_no", "NA")),
-#                     "scam_email": scam_row.get("scam_email", "NA"),
-#                     "scam_moniker": str(scam_row.get("scam_moniker", "NA")),
-#                     "scam_url_link": scam_row.get("scam_url_link", "NA"),
-#                     "scam_amount_lost": float(scam_row["scam_amount_lost"]),
-#                     "scam_incident_description": scam_row["scam_incident_description"]
-#                 }
-                
-#                 processed_data.append({
-#                     "profile_id": profile_id_counter,
-#                     "user_profile": user_profile,  
-#                     "scam_details": scam_details
-#                 })
-#                 profile_id_counter += 1
-        
-#         self.save_data(processed_data, output_file)
-#         return processed_data
     
 #Test functions for preprocessing
 if __name__ == "__main__":
@@ -282,7 +208,4 @@ if __name__ == "__main__":
     person_preprocessor = PersonPreprocessor()
     person_preprocessor.preprocess()
     
-    # # Preprocess victim details and scam details for victim chatbot
-    # victim_preprocessor = VictimProfilePreprocessor()
-    # victim_preprocessor.preprocess()
-    
+

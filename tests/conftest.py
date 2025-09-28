@@ -1,4 +1,3 @@
-# tests/conftest.py
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -19,7 +18,7 @@ def client(mocker):
 
     client = TestClient(app)
     yield client
-    # Clean up overrides after each test
+    
     app.dependency_overrides = {}
 
 @pytest.fixture(scope="function")

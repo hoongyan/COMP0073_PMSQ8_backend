@@ -2,17 +2,16 @@ demographic_config:
   age_ranges:
     - min_age: 18
       max_age: 40
-      probability: 0.37 # Averaged from originals: (0.6 + 0.4 + 0.1)/3
+      probability: 0.37 
     - min_age: 41
       max_age: 60
-      probability: 0.33 # Averaged: (0.3 + 0.4 + 0.3)/3
+      probability: 0.33 
     - min_age: 61
       max_age: 80
-      probability: 0.30 # Averaged: (0.1 + 0.2 + 0.6)/3
+      probability: 0.30 
   occupations:
-    # Combined and normalized from all scam types; removed duplicates and averaged probabilities
     - occupation: Software Engineer
-      probability: 0.05 # Appears in some; adjusted
+      probability: 0.05 
     - occupation: Student
       probability: 0.06
     - occupation: Marketing Executive
@@ -92,9 +91,9 @@ demographic_config:
     - occupation: Electrician
       probability: 0.03
   nationality_weights:
-    Singaporean: 0.70 # Averaged: (0.80 + 0.70 + 0.60)/3
-    Malaysian: 0.14 # Averaged: (0.15 + 0.12 + 0.15)/3
-    Indian: 0.067 # Averaged
+    Singaporean: 0.70 
+    Malaysian: 0.14 
+    Indian: 0.067 
     Filipino: 0.047
     Bangladeshi: 0.03
     American: 0.008
@@ -102,7 +101,7 @@ demographic_config:
   race_weights:
     Singaporean:
       - race: Chinese
-        probability: 0.47 # Averaged across originals
+        probability: 0.47 
       - race: Malay
         probability: 0.23
       - race: Indian
@@ -144,8 +143,8 @@ demographic_config:
       - race: Other
         probability: 0.30
   sex_weights:
-    Male: 0.53 # Averaged: (0.5 + 0.5 + 0.6)/3
-    Female: 0.47 # Averaged: (0.5 + 0.5 + 0.4)/3
+    Male: 0.53 
+    Female: 0.47 
 
 race_name_lists:
   Chinese:

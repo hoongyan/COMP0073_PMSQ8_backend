@@ -29,7 +29,6 @@ class SeedLoader:
         try:
             with self.db_manager.session_factory() as db:
                 
-                # Optional: Reset sequences if requested (e.g., for fresh seeding)
                 if reset_sequences:
                     try:
                         db.execute(text("ALTER SEQUENCE users_user_id_seq RESTART WITH 1;"))

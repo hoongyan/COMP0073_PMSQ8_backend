@@ -13,7 +13,7 @@ def EnumType(enum_class, **kwargs):
     """Custom Enum column type that uses enum values (not names)."""
     return Enum(
         enum_class,
-        name=enum_class.__name__.lower(),  # gives each enum type a nice name in Postgres
+        name=enum_class.__name__.lower(),  
         values_callable=lambda obj: [e.value for e in obj],
         **kwargs
     )
@@ -116,7 +116,6 @@ class PersonDetails(Base):
     creation_datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now()) #Use server default for timestamp
     last_updated_datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now(),onupdate=func.now()) #Use server default for timestamp
    
-    # Relationship for reports (many-to-many via association object); cascade delete to remove linked ReportPersonsLink entries when person is deleted
     reports = relationship("ReportPersonsLink", back_populates="person", cascade="all, delete, delete-orphan")
 
 class ReportPersonsLink(Base):
@@ -171,9 +170,7 @@ class Conversations(Base):
     report_id = Column(Integer, ForeignKey("scam_reports.report_id", ondelete="SET NULL"), nullable=True)
     creation_datetime = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
    
-    # Relationship for report (many-to-one)
     report = relationship("ScamReports", back_populates="conversations")
-    # Relationship for messages (one-to-many); cascade delete to remove all linked messages when conversation is deleted
     messages = relationship("Messages", back_populates="conversation", cascade="all, delete, delete-orphan")
    
 class Messages(Base):
